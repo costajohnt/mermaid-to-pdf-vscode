@@ -6,7 +6,7 @@
   "publisher": "mermaid-pdf-team",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/mermaid-to-pdf-vscode"
+    "url": "https://github.com/costajohnt/mermaid-to-pdf-vscode"
   },
   "license": "MIT",
   "engines": {

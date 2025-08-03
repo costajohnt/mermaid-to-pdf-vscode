@@ -67,8 +67,12 @@ sequenceDiagram
 
 ## Installation
 
-1. Install from VSCode Marketplace (coming soon)
-2. Or install from VSIX file
+1. Download the latest `.vsix` file from the [Releases](https://github.com/costajohnt/mermaid-to-pdf-vscode/releases) page
+2. Install in VSCode:
+   ```bash
+   code --install-extension mermaid-to-pdf-0.0.1.vsix
+   ```
+3. Reload VSCode window
 
 ## Known Issues
 
