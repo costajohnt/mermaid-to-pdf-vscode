@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { FinalMermaidToPdfConverter } from './finalConverter';
+import { BrowserPool } from './browserPool';
+import { DiagramCache } from './diagramCache';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('Mermaid to PDF extension is now active!');
@@ -63,4 +65,21 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(disposable);
 }
 
-export function deactivate() {}
+export async function deactivate() {
+    // Clean up browser pool and diagram cache when extension deactivates
+    try {
+        const browserPool = BrowserPool.getInstance();
+        await browserPool.destroy();
+        console.log('Browser pool cleaned up successfully');
+    } catch (error) {
+        console.warn('Failed to cleanup browser pool:', error);
+    }
+    
+    try {
+        const diagramCache = DiagramCache.getInstance();
+        diagramCache.destroy();
+        console.log('Diagram cache cleaned up successfully');
+    } catch (error) {
+        console.warn('Failed to cleanup diagram cache:', error);
+    }
+}

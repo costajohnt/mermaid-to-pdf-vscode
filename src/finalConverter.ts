@@ -1,8 +1,10 @@
-import * as fs from 'fs';
+import { promises as fs } from 'fs';
 import * as path from 'path';
 import { marked } from 'marked';
 import * as puppeteer from 'puppeteer';
 import { renderMermaid } from './mermaidRenderer';
+import { BrowserPool } from './browserPool';
+import { DiagramCache } from './diagramCache';
 
 export interface ConversionOptions {
     engine: 'puppeteer' | 'pdfkit';
@@ -22,12 +24,15 @@ export class FinalMermaidToPdfConverter {
     private options: ConversionOptions;
 
     constructor(options: Partial<ConversionOptions> = {}) {
+        // Validate and sanitize options
+        const validatedOptions = this.validateAndSanitizeOptions(options);
+        
         this.options = {
-            engine: options.engine || 'puppeteer',
-            quality: options.quality || 'standard',
-            theme: options.theme || 'light',
-            pageSize: options.pageSize || 'A4',
-            margins: options.margins || {
+            engine: validatedOptions.engine || 'puppeteer',
+            quality: validatedOptions.quality || 'standard',
+            theme: validatedOptions.theme || 'light',
+            pageSize: validatedOptions.pageSize || 'A4',
+            margins: validatedOptions.margins || {
                 top: '10mm',
                 right: '10mm', 
                 bottom: '10mm',
@@ -37,9 +42,12 @@ export class FinalMermaidToPdfConverter {
     }
 
     async convert(markdownPath: string, progressCallback?: (message: string, increment: number) => void): Promise<string> {
+        // Validate input file before processing
+        await this.validateMarkdownFile(markdownPath);
+        
         progressCallback?.('🔍 Reading Markdown file...', 5);
         
-        const markdownContent = fs.readFileSync(markdownPath, 'utf-8');
+        const markdownContent = await fs.readFile(markdownPath, 'utf-8');
         const outputDir = path.dirname(markdownPath);
         const basename = path.basename(markdownPath, '.md');
         const outputPath = path.join(outputDir, `${basename}_final.pdf`);
@@ -58,11 +66,132 @@ export class FinalMermaidToPdfConverter {
         
         progressCallback?.('🧹 Cleaning up...', 95);
         
-        this.cleanupTempImages(outputDir);
+        await this.cleanupTempImages(outputDir);
         
         progressCallback?.('✅ Complete!', 100);
         
+        // Log cache statistics
+        const cache = DiagramCache.getInstance();
+        const stats = cache.getStats();
+        console.log(`📊 Cache Stats: ${stats.totalEntries} entries, ${stats.hitRate}% hit rate`);
+        
         return outputPath;
+    }
+
+    private async validateMarkdownFile(filePath: string): Promise<void> {
+        // Path traversal protection
+        const normalizedPath = path.normalize(filePath);
+        if (normalizedPath.includes('..') || !path.isAbsolute(normalizedPath)) {
+            throw new Error('Invalid file path: Path traversal detected or relative path provided');
+        }
+
+        // Check file exists
+        try {
+            await fs.access(filePath);
+        } catch (error) {
+            throw new Error(`File not found: ${filePath}`);
+        }
+
+        // Check file extension
+        if (!filePath.toLowerCase().endsWith('.md')) {
+            throw new Error('Invalid file type: Only Markdown (.md) files are supported');
+        }
+
+        // File size validation (10MB limit)
+        const stats = await fs.stat(filePath);
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (stats.size > maxSize) {
+            throw new Error(`File too large: Maximum file size is ${maxSize / (1024 * 1024)}MB`);
+        }
+
+        // Ensure we can read the file
+        try {
+            await fs.access(filePath, require('fs').constants.R_OK);
+        } catch (error) {
+            throw new Error(`Cannot read file: ${filePath}. Check file permissions.`);
+        }
+    }
+
+    private validateAndSanitizeOptions(options: Partial<ConversionOptions>): Partial<ConversionOptions> {
+        const sanitized: Partial<ConversionOptions> = {};
+
+        // Validate engine
+        if (options.engine) {
+            const validEngines: ConversionOptions['engine'][] = ['puppeteer', 'pdfkit'];
+            if (validEngines.includes(options.engine)) {
+                sanitized.engine = options.engine;
+            } else {
+                console.warn(`Invalid engine "${options.engine}". Using default "puppeteer".`);
+            }
+        }
+
+        // Validate quality
+        if (options.quality) {
+            const validQualities: ConversionOptions['quality'][] = ['draft', 'standard', 'high'];
+            if (validQualities.includes(options.quality)) {
+                sanitized.quality = options.quality;
+            } else {
+                console.warn(`Invalid quality "${options.quality}". Using default "standard".`);
+            }
+        }
+
+        // Validate theme
+        if (options.theme) {
+            const validThemes: ConversionOptions['theme'][] = ['light', 'dark', 'auto'];
+            if (validThemes.includes(options.theme)) {
+                sanitized.theme = options.theme;
+            } else {
+                console.warn(`Invalid theme "${options.theme}". Using default "light".`);
+            }
+        }
+
+        // Validate page size
+        if (options.pageSize) {
+            const validPageSizes: ConversionOptions['pageSize'][] = ['A4', 'Letter', 'Legal'];
+            if (validPageSizes.includes(options.pageSize)) {
+                sanitized.pageSize = options.pageSize;
+            } else {
+                console.warn(`Invalid page size "${options.pageSize}". Using default "A4".`);
+            }
+        }
+
+        // Validate margins
+        if (options.margins) {
+            const validatedMargins = this.validateMargins(options.margins);
+            if (validatedMargins) {
+                sanitized.margins = validatedMargins;
+            }
+        }
+
+        return sanitized;
+    }
+
+    private validateMargins(margins: ConversionOptions['margins']): ConversionOptions['margins'] | null {
+        if (!margins || typeof margins !== 'object') {
+            console.warn('Invalid margins object. Using defaults.');
+            return null;
+        }
+
+        const marginPattern = /^\d+(\.\d+)?(mm|cm|in|px)$/;
+        const validatedMargins: ConversionOptions['margins'] = {
+            top: '10mm',
+            right: '10mm',
+            bottom: '10mm',
+            left: '10mm'
+        };
+
+        // Validate each margin
+        for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+            if (margins[side] && typeof margins[side] === 'string') {
+                if (marginPattern.test(margins[side])) {
+                    validatedMargins[side] = margins[side];
+                } else {
+                    console.warn(`Invalid margin value for ${side}: "${margins[side]}". Using default.`);
+                }
+            }
+        }
+
+        return validatedMargins;
     }
 
     private async processMermaidDiagrams(
@@ -74,6 +203,7 @@ export class FinalMermaidToPdfConverter {
         let match;
         let processedContent = content;
         const matches = [...content.matchAll(mermaidRegex)];
+        const cache = DiagramCache.getInstance();
         
         for (let i = 0; i < matches.length; i++) {
             match = matches[i];
@@ -81,30 +211,18 @@ export class FinalMermaidToPdfConverter {
             const imagePath = path.join(outputDir, `.temp_mermaid_${this.mermaidCounter++}.png`);
             
             const diagramProgress = 15 + (i / matches.length) * 30; // 15-45% range
-            progressCallback?.(`🎨 Rendering diagram ${i + 1}/${matches.length}...`, diagramProgress);
+            progressCallback?.(`🎨 Processing diagram ${i + 1}/${matches.length}...`, diagramProgress);
             
             try {
-                await renderMermaid(mermaidCode, imagePath);
+                // Use cache to get or render the diagram
+                const base64Image = await cache.getOrRender(mermaidCode, imagePath);
+                const dataUrl = `data:image/png;base64,${base64Image}`;
                 
-                if (fs.existsSync(imagePath)) {
-                    const stats = fs.statSync(imagePath);
-                    if (stats.size > 0) {
-                        // Convert to base64 for embedding
-                        const imageBuffer = fs.readFileSync(imagePath);
-                        const base64Image = imageBuffer.toString('base64');
-                        const dataUrl = `data:image/png;base64,${base64Image}`;
-                        
-                        // Create better image markdown with proper sizing
-                        const imageMarkdown = `<div class="mermaid-diagram"><img src="${dataUrl}" alt="Mermaid Diagram" style="max-width: 90%; max-height: 400px; height: auto; width: auto; display: block; margin: 5px auto; object-fit: contain;" /></div>`;
-                        
-                        processedContent = processedContent.replace(match[0], imageMarkdown);
-                        console.log(`✅ Rendered diagram ${i + 1}: ${stats.size} bytes`);
-                    } else {
-                        throw new Error('Generated image file is empty');
-                    }
-                } else {
-                    throw new Error('Image file was not created');
-                }
+                // Create better image markdown with proper sizing
+                const imageMarkdown = `<div class="mermaid-diagram"><img src="${dataUrl}" alt="Mermaid Diagram" style="max-width: 90%; max-height: 400px; height: auto; width: auto; display: block; margin: 5px auto; object-fit: contain;" /></div>`;
+                
+                processedContent = processedContent.replace(match[0], imageMarkdown);
+                console.log(`✅ Processed diagram ${i + 1}: ${(base64Image.length * 0.75 / 1024).toFixed(2)} KB`)
             } catch (error) {
                 console.error(`❌ Failed to render diagram ${i + 1}:`, error);
                 
@@ -326,17 +444,8 @@ export class FinalMermaidToPdfConverter {
     }
 
     private async htmlToPdf(html: string, outputPath: string): Promise<void> {
-        const browser = await puppeteer.launch({ 
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--no-first-run',
-                '--disable-extensions'
-            ]
-        });
+        const browserPool = BrowserPool.getInstance();
+        const browser = await browserPool.getBrowser();
         
         const page = await browser.newPage();
         
@@ -387,23 +496,35 @@ export class FinalMermaidToPdfConverter {
             console.error('❌ PDF generation failed:', error);
             throw new Error(`Failed to generate PDF: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
-            await browser.close();
+            // Close the page and release browser back to pool
+            try {
+                await page.close();
+            } catch (error) {
+                console.warn('Failed to close page:', error);
+            }
+            
+            const browserPool = BrowserPool.getInstance();
+            await browserPool.releaseBrowser(browser);
         }
     }
 
-    private cleanupTempImages(outputDir: string): void {
+    private async cleanupTempImages(outputDir: string): Promise<void> {
         const tempImagePattern = /^\.temp_mermaid_\d+\.png$/;
         try {
-            const files = fs.readdirSync(outputDir);
-            files.forEach(file => {
-                if (tempImagePattern.test(file)) {
-                    try {
-                        fs.unlinkSync(path.join(outputDir, file));
-                    } catch (error) {
-                        console.error(`Failed to delete temp file ${file}:`, error);
-                    }
-                }
-            });
+            const files = await fs.readdir(outputDir);
+            
+            // Use Promise.all for concurrent file deletion
+            await Promise.all(
+                files
+                    .filter(file => tempImagePattern.test(file))
+                    .map(async (file) => {
+                        try {
+                            await fs.unlink(path.join(outputDir, file));
+                        } catch (error) {
+                            console.error(`Failed to delete temp file ${file}:`, error);
+                        }
+                    })
+            );
         } catch (error) {
             console.error('Failed to cleanup temp files:', error);
         }
