@@ -48,7 +48,10 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "test:coverage": "c8 --reporter=html --reporter=text npm test",
+    "test:unit": "mocha 'out/test/**/*.test.js' --exclude 'out/test/runTest.js'",
+    "test:integration": "npm test"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

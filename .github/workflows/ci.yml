@@ -7,36 +7,123 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-and-test:
+    name: Build and Test (Node ${{ matrix.node-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
 
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [16.x, 18.x]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18.x, 20.x]
+        # Include specific test combinations
+        include:
+          - os: ubuntu-latest
+            node-version: 16.x
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
     
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
+        cache: 'npm'
         
     - name: Install dependencies
       run: npm ci
       
+    - name: Run linter
+      run: npm run lint
+      
     - name: Compile TypeScript
       run: npm run compile
       
-    - name: Run linter
-      run: npm run lint
-      continue-on-error: true
+    - name: Verify build output
+      run: |
+        echo "Checking build output..."
+        if [ ! -d "out" ]; then
+          echo "Build failed: out directory not found"
+          exit 1
+        fi
+        if [ ! -f "out/extension.js" ]; then
+          echo "Build failed: extension.js not found"
+          exit 1
+        fi
+        echo "Build output verified successfully"
+      shell: bash
+      
+    - name: Run tests
+      run: npm test
+      env:
+        NODE_ENV: test
+      timeout-minutes: 10
+      
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.os }}-node${{ matrix.node-version }}
+        path: |
+          test-results/
+          coverage/
+        retention-days: 7
       
     - name: Package extension
+      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '18.x'
       run: npx @vscode/vsce package
       
+    - name: Verify VSIX package
+      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '18.x'
+      run: |
+        echo "Verifying VSIX package..."
+        VSIX_FILE=$(ls *.vsix | head -n 1)
+        if [ -z "$VSIX_FILE" ]; then
+          echo "Package failed: No VSIX file found"
+          exit 1
+        fi
+        echo "VSIX package created: $VSIX_FILE"
+        unzip -l "$VSIX_FILE" | grep -E "(extension.js|package.json)" || exit 1
+        echo "VSIX package verified successfully"
+      shell: bash
+      
     - name: Upload VSIX artifact
-      uses: actions/upload-artifact@v3
+      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '18.x'
+      uses: actions/upload-artifact@v4
       with:
-        name: mermaid-to-pdf-${{ matrix.node-version }}.vsix
+        name: mermaid-to-pdf-extension
         path: '*.vsix'
+        retention-days: 30
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Check for security vulnerabilities
+      run: npm audit --production
+      continue-on-error: true
+      
+    - name: Check bundle size
+      run: |
+        npm run compile
+        echo "Extension size analysis:"
+        du -sh out/
+        find out -name "*.js" -exec ls -lh {} \; | head -20
+      
+    - name: TypeScript strict check
+      run: npx tsc --noEmit --strict
+      continue-on-error: true
