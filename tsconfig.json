@@ -1,15 +1,18 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "target": "ES2020",
+    "target": "ES2022",
     "outDir": "out",
-    "lib": ["ES2020", "DOM"],
+    "lib": ["ES2022", "DOM"],
     "sourceMap": true,
     "rootDir": "src",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
   },
-  "exclude": ["node_modules", ".vscode-test", "mermaid-to-pdf-mcp", "src/mcpClient.ts", "src/extensionWithMcp.ts"]
+  "exclude": ["node_modules", ".vscode-test", "mermaid-to-pdf-mcp"]
 }

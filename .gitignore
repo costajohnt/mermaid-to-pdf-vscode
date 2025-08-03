@@ -16,6 +16,7 @@ dist/
 # VSCode Extension specific
 *.vsix
 .vscode-test/
+.vscode/
 
 # OS specific
 .DS_Store

@@ -1,21 +1,14 @@
 import * as puppeteer from 'puppeteer';
 import * as fs from 'fs';
+import * as path from 'path';
+import { BrowserPool } from './browserPool';
 
 export async function renderMermaid(mermaidCode: string, outputPath: string): Promise<void> {
-    const browser = await puppeteer.launch({ 
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--no-first-run',
-            '--disable-extensions',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding'
-        ]
-    });
+    // Validate inputs
+    await validateMermaidInput(mermaidCode, outputPath);
+    
+    const browserPool = BrowserPool.getInstance();
+    const browser = await browserPool.getBrowser();
     
     const page = await browser.newPage();
     
@@ -149,14 +142,24 @@ ${mermaidCode}
             console.warn(`Mermaid render warning: ${renderError}`);
         }
         
-        // Wait for SVG to be present and have dimensions
+        // Wait for SVG to be present and have dimensions, or for error fallback
         await page.waitForFunction(
             () => {
                 const container = document.getElementById('mermaid-container');
-                if (!container) return false;
+                if (!container) {
+                    return false;
+                }
+                
+                // Check for error fallback content
+                const errorDiv = container.querySelector('div[style*="border: 2px dashed"]');
+                if (errorDiv) {
+                    return true; // Error fallback is ready
+                }
                 
                 const svg = container.querySelector('svg');
-                if (!svg) return false;
+                if (!svg) {
+                    return false;
+                }
                 
                 const bbox = svg.getBoundingClientRect();
                 return bbox.width > 0 && bbox.height > 0;
@@ -182,6 +185,71 @@ ${mermaidCode}
         console.error('Mermaid rendering error:', error);
         throw new Error(`Failed to render Mermaid diagram: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-        await browser.close();
+        // Close the page and release browser back to pool
+        try {
+            await page.close();
+        } catch (error) {
+            console.warn('Failed to close page:', error);
+        }
+        
+        const browserPool = BrowserPool.getInstance();
+        await browserPool.releaseBrowser(browser);
+    }
+}
+
+async function validateMermaidInput(mermaidCode: string, outputPath: string): Promise<void> {
+    // Validate mermaid code input
+    if (!mermaidCode || typeof mermaidCode !== 'string') {
+        throw new Error('Invalid mermaid code: Code must be a non-empty string');
+    }
+
+    if (mermaidCode.length > 50000) { // 50KB limit for diagram code
+        throw new Error('Mermaid code too large: Maximum size is 50KB');
+    }
+
+    // Basic validation to prevent potentially dangerous content
+    const dangerousPatterns = [
+        /<script/i,
+        /javascript:/i,
+        /data:text\/html/i,
+        /vbscript:/i,
+        /<iframe/i,
+        /<object/i,
+        /<embed/i
+    ];
+
+    for (const pattern of dangerousPatterns) {
+        if (pattern.test(mermaidCode)) {
+            throw new Error('Security violation: Potentially dangerous content detected in mermaid code');
+        }
+    }
+
+    // Validate output path
+    if (!outputPath || typeof outputPath !== 'string') {
+        throw new Error('Invalid output path: Path must be a non-empty string');
+    }
+
+    // Ensure output path is absolute and safe
+    const normalizedPath = path.normalize(outputPath);
+    if (normalizedPath.includes('..')) {
+        throw new Error('Invalid output path: Path traversal detected');
+    }
+
+    if (!normalizedPath.toLowerCase().endsWith('.png')) {
+        throw new Error('Invalid output format: Only PNG output is supported');
+    }
+
+    // Ensure output directory exists and is writable
+    const outputDir = path.dirname(outputPath);
+    try {
+        await fs.promises.access(outputDir);
+    } catch (error) {
+        throw new Error(`Output directory does not exist: ${outputDir}`);
+    }
+
+    try {
+        await fs.promises.access(outputDir, fs.constants.W_OK);
+    } catch (error) {
+        throw new Error(`Cannot write to output directory: ${outputDir}. Check permissions.`);
     }
 }
