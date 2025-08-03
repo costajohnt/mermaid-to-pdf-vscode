@@ -222,7 +222,7 @@ export class FinalMermaidToPdfConverter {
                 const imageMarkdown = `<div class="mermaid-diagram"><img src="${dataUrl}" alt="Mermaid Diagram" style="max-width: 90%; max-height: 400px; height: auto; width: auto; display: block; margin: 5px auto; object-fit: contain;" /></div>`;
                 
                 processedContent = processedContent.replace(match[0], imageMarkdown);
-                console.log(`✅ Processed diagram ${i + 1}: ${(base64Image.length * 0.75 / 1024).toFixed(2)} KB`)
+                console.log(`✅ Processed diagram ${i + 1}: ${(base64Image.length * 0.75 / 1024).toFixed(2)} KB`);
             } catch (error) {
                 console.error(`❌ Failed to render diagram ${i + 1}:`, error);
                 

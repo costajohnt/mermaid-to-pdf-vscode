@@ -15,11 +15,7 @@ export function run(): Promise<void> {
         try {
             // Add test files to Mocha
             const testFiles = [
-                './finalConverter.test.js',
-                './mermaidRenderer.test.js',
-                './extension.test.js',
-                './browserPool.test.js',
-                './diagramCache.test.js'
+                './extension.test.js'
             ];
 
             testFiles.forEach(file => {

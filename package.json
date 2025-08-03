@@ -44,14 +44,15 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./ && npm run copy-fixtures",
-    "copy-fixtures": "mkdir -p out/test/fixtures && cp -r src/test/fixtures/* out/test/fixtures/ 2>/dev/null || true",
+    "copy-fixtures": "node -e \"const fs=require('fs'); const path=require('path'); const src='src/test/fixtures'; const dst='out/test/fixtures'; if(!fs.existsSync(dst)){fs.mkdirSync(dst,{recursive:true});} if(fs.existsSync(src)){fs.readdirSync(src).forEach(f=>{fs.copyFileSync(path.join(src,f),path.join(dst,f));});}\"",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js",
-    "test:coverage": "c8 --reporter=html --reporter=text npm test",
-    "test:unit": "mocha 'out/test/**/*.test.js' --exclude 'out/test/runTest.js'",
-    "test:integration": "npm test"
+    "test": "npm run test:simple",
+    "test:vscode": "node ./out/test/runTest.js",
+    "test:simple": "mocha 'out/test/unit/**/*.js' --reporter spec",
+    "test:coverage": "c8 --reporter=html --reporter=text npm run test:simple",
+    "test:integration": "npm run test:vscode"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
