@@ -31,6 +31,12 @@ export interface ConversionOutput {
     pages?: number;
     diagrams?: number;
     processingTime?: number;
+    // Google Slides specific
+    presentationId?: string;
+    url?: string;
+    editUrl?: string;
+    shareUrl?: string | undefined;
+    slides?: number;
   };
 }
 

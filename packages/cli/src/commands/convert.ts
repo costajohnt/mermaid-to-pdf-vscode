@@ -11,6 +11,7 @@ import path from 'path';
 import { 
   createConverter, 
   PDFGenerator, 
+  GoogleSlidesGenerator,
   MermaidRenderer,
   ConversionOutput 
 } from '@mermaid-converter/core';
@@ -27,6 +28,7 @@ interface ConvertOptions {
   batch?: boolean;
   concurrency?: string;
   overwrite?: boolean;
+  googleAuth?: string;
   quiet?: boolean;
   verbose?: boolean;
 }
@@ -34,18 +36,23 @@ interface ConvertOptions {
 export const convertCommand = new Command('convert')
   .description('Convert Markdown files with Mermaid diagrams')
   .argument('<input>', 'Input file(s) or glob pattern')
-  .option('-f, --format <format>', 'Output format', 'pdf')
+  .option('-f, --format <format>', 'Output format (pdf, google-slides)', 'pdf')
   .option('-o, --output <file>', 'Output file (single file mode)')
   .option('-d, --output-dir <dir>', 'Output directory (batch mode)', '.')
   .option('-t, --template <name>', 'Template to use', 'default')
   .option('-b, --batch', 'Enable batch processing for multiple files')
   .option('-c, --concurrency <n>', 'Number of concurrent conversions', '3')
   .option('--overwrite', 'Overwrite existing files', false)
+  .option('--google-auth <path>', 'Path to Google service account JSON file (for Google Slides)')
   .action(async (input: string, options: ConvertOptions) => {
     const converter = createConverter();
     
     // Register generators and renderers
     converter.registerGenerator(new PDFGenerator());
+    if (options.format === 'google-slides') {
+      const authOptions = options.googleAuth ? { keyFile: options.googleAuth } : undefined;
+      converter.registerGenerator(new GoogleSlidesGenerator(authOptions));
+    }
     converter.registerRenderer(new MermaidRenderer());
     
     try {
@@ -109,11 +116,21 @@ async function convertSingleFile(
     const content = await fs.readFile(inputFile, 'utf-8');
     
     // Determine output file
-    const outputFile = options.output || 
-      path.join(
-        options.outputDir || path.dirname(inputFile),
-        path.basename(inputFile, '.md') + `.${options.format || 'pdf'}`
-      );
+    let outputFile: string;
+    if (options.format === 'google-slides') {
+      // For Google Slides, we save the presentation info as JSON
+      outputFile = options.output || 
+        path.join(
+          options.outputDir || path.dirname(inputFile),
+          path.basename(inputFile, '.md') + '_slides.json'
+        );
+    } else {
+      outputFile = options.output || 
+        path.join(
+          options.outputDir || path.dirname(inputFile),
+          path.basename(inputFile, '.md') + `.${options.format || 'pdf'}`
+        );
+    }
     
     // Check if output exists
     if (!options.overwrite) {
@@ -138,12 +155,26 @@ async function convertSingleFile(
     await fs.mkdir(path.dirname(outputFile), { recursive: true });
     await fs.writeFile(outputFile, result.data);
     
-    spinner.succeed(
-      `Converted ${chalk.cyan(path.basename(inputFile))} → ${chalk.green(path.basename(outputFile))} ` +
-      `(${formatBytes(result.data.length)}, ${formatDuration(duration)})`
-    );
-    
-    logger.info(`Output saved to: ${outputFile}`);
+    if (options.format === 'google-slides') {
+      // Show Google Slides specific success message
+      const slideInfo = JSON.parse(result.data.toString());
+      spinner.succeed(
+        `Created Google Slides presentation: ${chalk.cyan(slideInfo.title)} ` +
+        `(${slideInfo.slideCount} slides, ${formatDuration(duration)})`
+      );
+      logger.info(`Presentation URL: ${chalk.blue(slideInfo.presentationUrl)}`);
+      logger.info(`Edit URL: ${chalk.blue(slideInfo.editUrl)}`);
+      if (slideInfo.shareUrl) {
+        logger.info(`Share URL: ${chalk.blue(slideInfo.shareUrl)}`);
+      }
+      logger.info(`Presentation details saved to: ${outputFile}`);
+    } else {
+      spinner.succeed(
+        `Converted ${chalk.cyan(path.basename(inputFile))} → ${chalk.green(path.basename(outputFile))} ` +
+        `(${formatBytes(result.data.length)}, ${formatDuration(duration)})`
+      );
+      logger.info(`Output saved to: ${outputFile}`);
+    }
   } catch (error: any) {
     spinner.fail(`Failed to convert ${path.basename(inputFile)}`);
     throw error;

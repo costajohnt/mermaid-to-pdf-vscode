@@ -21,6 +21,7 @@ export { BrowserPool } from './browser';
 
 // Built-in generators and renderers
 export { PDFGenerator } from './generators/pdf';
+export { GoogleSlidesGenerator } from './generators/google-slides';
 export { MermaidRenderer } from './renderers/mermaid';
 
 // Version
