@@ -10,12 +10,12 @@ import {
 import { MermaidConverter } from './converter.js';
 import { ConversionOptions, ConversionResult } from './types.js';
 
-// Simple console logger
+// Simple console logger - all output goes to stderr to avoid breaking MCP JSON-RPC on stdout
 const logger = {
-  info: (obj: any, msg?: string) => console.log(msg || JSON.stringify(obj)),
+  info: (obj: any, msg?: string) => console.error(msg || JSON.stringify(obj)),
   error: (obj: any, msg?: string) => console.error(msg || JSON.stringify(obj)),
-  warn: (obj: any, msg?: string) => console.warn(msg || JSON.stringify(obj)),
-  debug: (obj: any, msg?: string) => console.debug(msg || JSON.stringify(obj))
+  warn: (obj: any, msg?: string) => console.error(msg || JSON.stringify(obj)),
+  debug: (obj: any, msg?: string) => console.error(msg || JSON.stringify(obj))
 };
 
 // Initialize converter
@@ -25,7 +25,7 @@ const converter = new MermaidConverter(logger);
 const server = new Server(
   {
     name: 'mermaid-to-pdf',
-    version: '1.0.0',
+    version: '1.0.7',
     description: 'MCP server for converting Markdown documents with Mermaid diagrams to professional PDFs',
   },
   {
@@ -77,12 +77,15 @@ const TOOLS = {
                 bottom: { type: 'string' },
                 left: { type: 'string' }
               },
+              additionalProperties: false,
               description: 'Page margins (default: 20mm all sides)'
             }
-          }
+          },
+          additionalProperties: false
         }
       },
-      required: ['markdown']
+      required: ['markdown'],
+      additionalProperties: false
     }
   },
   
@@ -115,10 +118,12 @@ const TOOLS = {
               type: 'string',
               enum: ['A4', 'Letter', 'Legal']
             }
-          }
+          },
+          additionalProperties: false
         }
       },
-      required: ['inputPath']
+      required: ['inputPath'],
+      additionalProperties: false
     }
   },
 
@@ -138,7 +143,8 @@ const TOOLS = {
           description: 'Output format for diagrams (default: "png")'
         }
       },
-      required: ['markdown']
+      required: ['markdown'],
+      additionalProperties: false
     }
   },
 
@@ -153,7 +159,8 @@ const TOOLS = {
           description: 'The Mermaid diagram code to validate'
         }
       },
-      required: ['mermaidCode']
+      required: ['mermaidCode'],
+      additionalProperties: false
     }
   },
 
@@ -441,6 +448,17 @@ Remember: The goal is to create professional, visual documentation that would be
     );
   }
 });
+
+// Cleanup on exit
+async function cleanup() {
+  logger.info('Cleaning up...');
+  await converter.cleanup();
+  process.exit(0);
+}
+
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+process.on('exit', cleanup);
 
 // Start the server
 async function main() {

@@ -25,3 +25,4 @@ This is a VSCode extension that converts Markdown files with Mermaid diagrams to
 - Pull requests should target the main branch
 - CI/CD runs on Node.js 20.x
 - Extension packaging requires successful build + tests
+- **No Co-Author**: Do not add "Co-Authored-By: Claude" to commit messages or releases

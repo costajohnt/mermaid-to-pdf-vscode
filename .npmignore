@@ -1,0 +1,33 @@
+# Development files
+.github/
+.claude/
+src/
+*.test.ts
+*.test.js
+tsconfig.json
+.eslintrc.json
+
+# Documentation (keep only README.md)
+*.md
+!README.md
+
+# Test files and artifacts
+test-*
+sample*
+cache-test*
+*.pdf
+docs/
+packages/
+
+# MCP server (separate package)
+mermaid-to-pdf-mcp/
+
+# Build artifacts to exclude
+*.map
+*.d.ts
+
+# Other files
+publish-commands.sh
+.env*
+docker-compose.yml
+Dockerfile
