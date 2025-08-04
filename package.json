@@ -1,70 +1,43 @@
 {
-  "name": "mermaid-to-pdf",
-  "displayName": "Mermaid to PDF",
-  "description": "Convert Markdown files with Mermaid diagrams to PDF with embedded images",
-  "version": "0.0.1",
-  "publisher": "mermaid-pdf-team",
+  "name": "mermaid-to-pdf-cli",
+  "description": "CLI tool to convert Markdown files with Mermaid diagrams to PDF",
+  "version": "1.0.0",
+  "author": "Mermaid to PDF Team",
   "repository": {
     "type": "git",
-    "url": "https://github.com/costajohnt/mermaid-to-pdf-vscode"
+    "url": "https://github.com/costajohnt/mermaid-to-pdf-cli"
   },
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "node": ">=18.0.0"
   },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [],
-  "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "mermaid-to-pdf.convertToPDF",
-        "title": "Convert Markdown to PDF with Mermaid"
-      }
-    ],
-    "menus": {
-      "editor/context": [
-        {
-          "when": "resourceExtname == .md",
-          "command": "mermaid-to-pdf.convertToPDF",
-          "group": "navigation"
-        }
-      ],
-      "explorer/context": [
-        {
-          "when": "resourceExtname == .md",
-          "command": "mermaid-to-pdf.convertToPDF",
-          "group": "navigation"
-        }
-      ]
-    }
+  "type": "module",
+  "main": "./dist/cli.js",
+  "bin": {
+    "mermaid-to-pdf": "./dist/cli.js"
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./ && npm run copy-fixtures",
-    "copy-fixtures": "node -e \"const fs=require('fs'); const path=require('path'); const src='src/test/fixtures'; const dst='out/test/fixtures'; if(!fs.existsSync(dst)){fs.mkdirSync(dst,{recursive:true});} if(fs.existsSync(src)){fs.readdirSync(src).forEach(f=>{fs.copyFileSync(path.join(src,f),path.join(dst,f));});}\"",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts",
-    "test": "npm run test:simple",
-    "test:vscode": "node ./out/test/runTest.js",
-    "test:simple": "mocha 'out/test/unit/**/*.js' --reporter spec",
-    "test:coverage": "c8 --reporter=html --reporter=text npm run test:simple",
-    "test:integration": "npm run test:vscode"
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "test": "node --test dist/cli.test.js",
+    "lint": "eslint src --ext ts"
   },
+  "keywords": [
+    "mermaid",
+    "pdf",
+    "markdown",
+    "cli",
+    "converter",
+    "diagrams"
+  ],
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@types/vscode": "^1.85.0",
-    "@types/mocha": "^10.0.6",
-    "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0",
-    "@vscode/test-cli": "^0.0.4",
-    "@vscode/test-electron": "^2.3.8",
-    "mocha": "^10.2.0",
+    "typescript": "^5.3.3",
+    "tsx": "^4.0.0",
     "eslint": "^8.56.0",
-    "typescript": "^5.3.3"
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0"
   },
   "dependencies": {
     "marked": "^12.0.0",

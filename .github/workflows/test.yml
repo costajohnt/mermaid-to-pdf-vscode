@@ -31,13 +31,13 @@ jobs:
     - name: Run linter
       run: npm run lint
       
-    - name: Compile TypeScript
-      run: npm run compile
+    - name: Build CLI tool
+      run: npm run build
       
     - name: Run tests
       run: |
-        echo "Running basic tests..."
-        npm run test:simple || echo "Tests completed with exit code $?"
+        echo "Running CLI tool tests..."
+        npm run test || echo "Tests completed with exit code $?"
       env:
         NODE_ENV: test
         

@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import { renderMermaid } from './mermaidRenderer';
+import { renderMermaid } from './mermaidRenderer.js';
 
 interface CacheEntry {
     base64Data: string;

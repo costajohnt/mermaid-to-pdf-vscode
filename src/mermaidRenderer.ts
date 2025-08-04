@@ -1,7 +1,7 @@
 import * as puppeteer from 'puppeteer';
 import * as fs from 'fs';
 import * as path from 'path';
-import { BrowserPool } from './browserPool';
+import { BrowserPool } from './browserPool.js';
 
 export async function renderMermaid(mermaidCode: string, outputPath: string): Promise<void> {
     // Validate inputs

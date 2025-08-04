@@ -1,18 +1,24 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
     "target": "ES2022",
-    "outDir": "out",
-    "lib": ["ES2022", "DOM"],
-    "sourceMap": true,
-    "rootDir": "src",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
-    "skipLibCheck": true,
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "exactOptionalPropertyTypes": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "allowSyntheticDefaultImports": true
   },
-  "exclude": ["node_modules", ".vscode-test", "mermaid-to-pdf-mcp", "packages"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

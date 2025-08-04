@@ -1,10 +1,10 @@
-import { promises as fs } from 'fs';
+import { promises as fs, constants } from 'fs';
 import * as path from 'path';
 import { marked } from 'marked';
 import * as puppeteer from 'puppeteer';
-import { renderMermaid } from './mermaidRenderer';
-import { BrowserPool } from './browserPool';
-import { DiagramCache } from './diagramCache';
+import { renderMermaid } from './mermaidRenderer.js';
+import { BrowserPool } from './browserPool.js';
+import { DiagramCache } from './diagramCache.js';
 
 export interface ConversionOptions {
     engine: 'puppeteer' | 'pdfkit';
@@ -106,7 +106,7 @@ export class FinalMermaidToPdfConverter {
 
         // Ensure we can read the file
         try {
-            await fs.access(filePath, require('fs').constants.R_OK);
+            await fs.access(filePath, constants.R_OK);
         } catch (error) {
             throw new Error(`Cannot read file: ${filePath}. Check file permissions.`);
         }

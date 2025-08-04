@@ -26,6 +26,7 @@ const server = new Server(
   {
     name: 'mermaid-to-pdf',
     version: '1.0.0',
+    description: 'MCP server for converting Markdown documents with Mermaid diagrams to professional PDFs',
   },
   {
     capabilities: {
@@ -154,6 +155,16 @@ const TOOLS = {
       },
       required: ['mermaidCode']
     }
+  },
+
+  getCustomInstructions: {
+    name: 'get_custom_instructions',
+    description: 'Get custom instructions for LLMs on how to effectively use this MCP server for creating documentation with diagrams',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false
+    }
   }
 };
 
@@ -271,6 +282,141 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: JSON.stringify(validation, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'get_custom_instructions': {
+        const instructions = {
+          role: 'mermaid-pdf-assistant',
+          instructions: `# Custom Instructions for Mermaid to PDF MCP Server
+
+## Overview
+You are now connected to a Mermaid to PDF MCP server that can convert Markdown documents with Mermaid diagrams into professional PDFs. This is especially powerful for creating technical documentation, system designs, process flows, and any content that benefits from visual diagrams.
+
+## When to Use This Server
+**IMPORTANT**: When a user asks for documentation, reports, or any content that would benefit from diagrams and they want it as a PDF, follow this workflow:
+
+1. **First, create the content in Markdown format** with appropriate Mermaid diagrams
+2. **Then use the MCP server** to convert it to PDF
+
+## Recommended Workflow for Document Creation
+
+### Step 1: Create Rich Markdown Content
+When users request documentation (especially technical docs, process flows, system designs, etc.), create comprehensive Markdown that includes:
+
+- **Flowcharts** for processes and decision trees
+- **Sequence diagrams** for system interactions  
+- **Class diagrams** for software architecture
+- **Entity relationship diagrams** for database designs
+- **Gantt charts** for project timelines
+- **State diagrams** for system states
+- **Network diagrams** for infrastructure
+
+### Step 2: Use Mermaid Diagrams Generously
+Include relevant Mermaid diagrams throughout your content. Popular diagram types:
+
+\`\`\`mermaid
+flowchart TD
+    A[User Request] --> B{Analysis}
+    B --> |Technical| C[Create Technical Docs]
+    B --> |Process| D[Create Process Flow]
+    C --> E[Add Architecture Diagrams]
+    D --> F[Add Process Diagrams]
+    E --> G[Convert to PDF]
+    F --> G
+\`\`\`
+
+### Step 3: Convert to Professional PDF
+After creating the Markdown content, use the \`convert_markdown_to_pdf\` tool to generate a professional PDF.
+
+## Best Practices
+
+### Content Creation
+- **Start with structure**: Use proper heading hierarchy (# ## ### ####)
+- **Add context**: Include brief explanations before each diagram
+- **Use consistent styling**: Maintain consistent formatting throughout
+- **Include examples**: Add code snippets, examples, or sample data where relevant
+
+### Diagram Selection Guide
+- **Flowcharts**: Decision processes, workflows, algorithms
+- **Sequence diagrams**: API interactions, user journeys, system communications
+- **Class diagrams**: Software architecture, object relationships
+- **ER diagrams**: Database schema, data relationships
+- **Gantt charts**: Project timelines, milestones
+- **Pie charts**: Data distribution, percentages
+- **State diagrams**: System states, user interface flows
+
+### PDF Options
+- **Quality**: Use 'high' for final documents, 'standard' for drafts
+- **Theme**: 'light' for professional docs, 'dark' for developer-focused content
+- **Page size**: 'A4' for international, 'Letter' for US audiences
+
+## Example Usage Scenarios
+
+### Scenario 1: Technical Documentation
+User: "Create documentation for our new API"
+Your response: Create comprehensive Markdown with:
+- API overview and architecture diagram
+- Sequence diagrams for key endpoints
+- Flowcharts for authentication process
+- Code examples and responses
+- Then convert to PDF
+
+### Scenario 2: Process Documentation  
+User: "Document our customer onboarding process"
+Your response: Create Markdown with:
+- Process flowchart from sign-up to activation
+- Swimlane diagrams showing different team responsibilities
+- State diagram for customer status transitions
+- Then convert to PDF
+
+### Scenario 3: System Design
+User: "Help me design a microservices architecture"
+Your response: Create Markdown with:
+- System architecture diagrams
+- Service interaction sequence diagrams
+- Database ER diagrams
+- Deployment flowcharts
+- Then convert to PDF
+
+## Tool Usage Patterns
+
+1. **convert_markdown_to_pdf**: Main tool for creating final PDF documents
+2. **validate_mermaid_syntax**: Use this first if you're unsure about diagram syntax
+3. **extract_mermaid_diagrams**: Useful for getting individual diagram images
+4. **convert_markdown_file_to_pdf**: When working with existing markdown files
+
+## Quality Tips
+- Always validate complex Mermaid syntax before conversion
+- Use descriptive alt text and captions for diagrams
+- Include a table of contents for longer documents
+- Add page breaks with \`<div style="page-break-after: always;"></div>\` where needed
+- Test with 'draft' quality first, then use 'high' for final version
+
+Remember: The goal is to create professional, visual documentation that would be difficult to achieve with plain text alone. Diagrams should enhance understanding, not just decorate the content.`,
+          examples: [
+            {
+              scenario: "User asks for API documentation",
+              action: "Create Markdown with API flowcharts, sequence diagrams, and examples, then convert to PDF"
+            },
+            {
+              scenario: "User wants system architecture design", 
+              action: "Create Markdown with architecture diagrams, component interactions, and data flow, then convert to PDF"
+            },
+            {
+              scenario: "User needs process documentation",
+              action: "Create Markdown with process flowcharts, decision trees, and role assignments, then convert to PDF"
+            }
+          ]
+        };
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(instructions, null, 2)
             }
           ]
         };
