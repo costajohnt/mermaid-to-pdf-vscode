@@ -33,72 +33,52 @@ Transform your ideas into professional PDF documents with beautiful diagrams - j
 
 3. **Restart Claude Desktop**
 
-### For Claude Code Users (CLI Tool)
+### For Claude Code Users
 
-If you only use Claude Code and don't have Claude Desktop, you can still use the MCP server:
+If you use Claude Code, you can configure the MCP server using Claude Code's built-in MCP management:
 
 1. **Install the MCP server:**
    ```bash
    npm install -g mermaid-to-pdf-mcp-server
    ```
 
-2. **Create the Claude config directory and file:**
+2. **Add the MCP server to Claude Code:**
 
-   **On macOS:**
+   **Option A: User scope (available across all projects):**
    ```bash
-   # Create config directory
-   mkdir -p ~/Library/Application\ Support/Claude
-   
-   # Create config file
-   cat > ~/Library/Application\ Support/Claude/claude_desktop_config.json << 'EOF'
-   {
-     "mcpServers": {
-       "mermaid-to-pdf": {
-         "command": "mermaid-to-pdf-mcp",
-         "args": []
-       }
-     }
-   }
-   EOF
+   claude mcp add --scope user mermaid-to-pdf mermaid-to-pdf-mcp
    ```
 
-   **On Windows:**
-   ```powershell
-   # Create config directory
-   New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude"
-   
-   # Create config file
-   @'
-   {
-     "mcpServers": {
-       "mermaid-to-pdf": {
-         "command": "mermaid-to-pdf-mcp",
-         "args": []
-       }
-     }
-   }
-   '@ | Out-File -FilePath "$env:APPDATA\Claude\claude_desktop_config.json" -Encoding UTF8
-   ```
-
-   **On Linux:**
+   **Option B: Project scope (for a specific project, creates `.mcp.json`):**
    ```bash
-   # Create config directory
-   mkdir -p ~/.config/Claude
-   
-   # Create config file
-   cat > ~/.config/Claude/claude_desktop_config.json << 'EOF'
-   {
-     "mcpServers": {
-       "mermaid-to-pdf": {
-         "command": "mermaid-to-pdf-mcp",
-         "args": []
-       }
-     }
-   }
-   EOF
+   # Navigate to your project directory first
+   claude mcp add --scope project mermaid-to-pdf mermaid-to-pdf-mcp
    ```
 
-3. **Restart Claude Code** (if it's running)
+   **Option C: Local scope (private to you in current project):**
+   ```bash
+   # Navigate to your project directory first  
+   claude mcp add --scope local mermaid-to-pdf mermaid-to-pdf-mcp
+   ```
+
+3. **Verify the server is configured:**
+   ```bash
+   claude mcp list
+   ```
+
+**Alternative: Manual Configuration**
+
+You can also create a `.mcp.json` file in your project root:
+```json
+{
+  "mcpServers": {
+    "mermaid-to-pdf": {
+      "command": "mermaid-to-pdf-mcp",
+      "args": []
+    }
+  }
+}
+```
 
 ### How to Use
 
