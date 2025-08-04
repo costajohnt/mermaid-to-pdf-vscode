@@ -1,0 +1,16 @@
+# Development files
+src/
+tsconfig.json
+*.test.*
+
+# Test files and artifacts  
+test-*
+*.cjs
+
+# Build artifacts to exclude
+*.map
+*.d.ts
+
+# Documentation (keep only README.md)
+*.md
+!README.md

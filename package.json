@@ -5,7 +5,7 @@
   "author": "Mermaid to PDF Team",
   "repository": {
     "type": "git",
-    "url": "https://github.com/costajohnt/mermaid-to-pdf-cli"
+    "url": "git+https://github.com/costajohnt/mermaid-to-pdf-cli.git"
   },
   "license": "MIT",
   "engines": {
@@ -14,7 +14,7 @@
   "type": "module",
   "main": "./dist/cli.js",
   "bin": {
-    "mermaid-to-pdf": "./dist/cli.js"
+    "mermaid-to-pdf": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",

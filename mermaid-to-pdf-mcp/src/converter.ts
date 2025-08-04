@@ -4,6 +4,8 @@ import { createHash } from 'crypto';
 import puppeteer from 'puppeteer';
 import { marked } from 'marked';
 import * as pino from 'pino';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import {
   ConversionOptions,
   ConversionResult,
@@ -12,6 +14,8 @@ import {
   ValidationResult,
   CacheEntry
 } from './types.js';
+
+const execAsync = promisify(exec);
 
 export class MermaidConverter {
   private cache = new Map<string, CacheEntry>();
@@ -22,6 +26,96 @@ export class MermaidConverter {
   async convertMarkdownToPdf(markdown: string, options: ConversionOptions = {}): Promise<ConversionResult> {
     const startTime = Date.now();
     
+    try {
+      // Use the working CLI tool approach
+      const result = await this.convertUsingCLI(markdown, options);
+      this.logger.info('CLI conversion succeeded!');
+      return result;
+    } catch (error) {
+      this.logger.error({ error: error instanceof Error ? error.message : String(error) }, 'CLI conversion failed, falling back to browser approach');
+      // Fallback to original browser approach
+      return await this.convertUsingBrowser(markdown, options, startTime);
+    }
+  }
+
+  private async convertUsingCLI(markdown: string, options: ConversionOptions = {}): Promise<ConversionResult> {
+    const startTime = Date.now();
+    
+    // Create temporary files
+    const tempDir = await fs.mkdtemp('/tmp/mcp-mermaid-');
+    const inputFile = path.join(tempDir, 'input.md');
+    const outputFile = path.join(tempDir, 'output.pdf');
+    
+    try {
+      // Write markdown to temp file
+      await fs.writeFile(inputFile, markdown, 'utf-8');
+      
+      // Try to find the CLI tool - check if globally installed
+      let cliCommand = 'mermaid-to-pdf';
+      try {
+        const { stdout: whichOutput } = await execAsync('which mermaid-to-pdf');
+        this.logger.info(`Found CLI tool at: ${whichOutput.trim()}`);
+      } catch (whichError) {
+        this.logger.warn({ whichError }, 'Global CLI not found, trying local version');
+        // If not globally available, try the local built version
+        const localCli = path.resolve(__dirname, '../../../dist/cli.js');
+        try {
+          await fs.access(localCli);
+          cliCommand = `node ${localCli}`;
+          this.logger.info(`Using local CLI at: ${localCli}`);
+        } catch (accessError) {
+          throw new Error(`CLI tool not available: global check failed (${whichError instanceof Error ? whichError.message : String(whichError)}), local check failed (${accessError instanceof Error ? accessError.message : String(accessError)})`);
+        }
+      }
+      
+      // Run the CLI tool (it will create a file with _final.pdf suffix)
+      this.logger.info(`Running CLI command: ${cliCommand} "${inputFile}"`);
+      const { stdout, stderr } = await execAsync(`${cliCommand} "${inputFile}"`);
+      
+      this.logger.info({ stdout }, 'CLI tool output');
+      if (stderr) {
+        this.logger.warn({ stderr }, 'CLI tool warnings');
+      }
+      
+      // The CLI tool creates a file with _final.pdf suffix
+      const actualOutputFile = inputFile.replace(/\.md$/, '_final.pdf');
+      
+      // Check if output file was created
+      try {
+        await fs.access(actualOutputFile);
+        this.logger.info(`Output file created: ${actualOutputFile}`);
+      } catch (accessError) {
+        throw new Error(`Output file not created: ${actualOutputFile} - ${accessError instanceof Error ? accessError.message : String(accessError)}`);
+      }
+      
+      // Read the generated PDF
+      const pdfBuffer = await fs.readFile(actualOutputFile);
+      this.logger.info(`PDF read successfully: ${pdfBuffer.length} bytes`);
+      
+      // Count diagrams in the markdown
+      const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
+      const diagramCount = (markdown.match(mermaidRegex) || []).length;
+      
+      return {
+        pdfBase64: pdfBuffer.toString('base64'),
+        metadata: {
+          pageCount: 0,
+          fileSize: pdfBuffer.length,
+          diagramCount,
+          processingTime: Date.now() - startTime
+        }
+      };
+    } finally {
+      // Cleanup temp files
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      } catch (cleanupError) {
+        this.logger.warn({ cleanupError }, 'Failed to cleanup temp files');
+      }
+    }
+  }
+
+  private async convertUsingBrowser(markdown: string, options: ConversionOptions = {}, startTime: number): Promise<ConversionResult> {
     try {
       // Process Mermaid diagrams
       const { processedMarkdown, diagramCount } = await this.processMermaidDiagrams(markdown);
@@ -42,7 +136,7 @@ export class MermaidConverter {
         }
       };
     } catch (error) {
-      this.logger.error({ error }, 'Conversion failed');
+      this.logger.error({ error }, 'Browser conversion failed');
       throw error;
     }
   }
@@ -159,20 +253,41 @@ export class MermaidConverter {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: [
+          '--no-sandbox', 
+          '--disable-setuid-sandbox', 
+          '--disable-dev-shm-usage',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding'
+        ]
       });
     }
 
     const page = await this.browser.newPage();
     
     try {
-      const html = this.getMermaidRenderHtml(mermaidCode);
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      // Set viewport for consistent rendering - smaller for more compact diagrams
+      await page.setViewport({ width: 800, height: 600, deviceScaleFactor: 2 });
       
-      // Wait for Mermaid to render
+      // Increase timeout for complex diagrams - use same as CLI
+      page.setDefaultTimeout(60000);
+      
+      const html = this.getMermaidRenderHtml(mermaidCode);
+      await page.setContent(html, { 
+        waitUntil: ['networkidle0', 'domcontentloaded']
+      });
+      
+      // Wait for mermaid library to load first
+      await page.waitForFunction(
+        () => typeof (window as any).mermaid !== 'undefined' && typeof (window as any).mermaid.run === 'function',
+        { timeout: 30000 }
+      );
+      
+      // Wait for Mermaid to render - use same timeout as CLI
       await page.waitForFunction(
         () => (window as any).mermaidRenderComplete === true,
-        { timeout: 30000 }
+        { timeout: 45000 }
       );
       
       let result: string;
@@ -184,7 +299,11 @@ export class MermaidConverter {
         const element = await page.$('.mermaid');
         if (!element) throw new Error('Mermaid diagram not found');
         
-        const screenshot = await element.screenshot({ type: 'png' });
+        // Take high-resolution screenshot
+        const screenshot = await element.screenshot({ 
+          type: 'png',
+          omitBackground: false
+        });
         result = screenshot.toString('base64');
       }
       
@@ -206,29 +325,97 @@ export class MermaidConverter {
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
-        body { margin: 0; padding: 20px; background: white; }
-        .mermaid { display: inline-block; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        }
+        #mermaid-container {
+            display: inline-block;
+            min-width: 100px;
+            min-height: 100px;
+        }
+        .mermaid {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        }
+        /* Ensure SVG is visible */
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
     </style>
 </head>
 <body>
-    <div class="mermaid" id="diagram">${mermaidCode}</div>
+    <div id="mermaid-container">
+        <div class="mermaid" id="diagram">
+${mermaidCode}
+        </div>
+    </div>
+    
     <script>
+        // Initialize mermaid with better error handling
         mermaid.initialize({ 
             startOnLoad: false,
             theme: 'default',
-            securityLevel: 'loose'
+            themeVariables: {
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
+                fontSize: '14px'
+            },
+            logLevel: 'error',
+            securityLevel: 'loose',
+            flowchart: {
+                htmlLabels: true,
+                useMaxWidth: false,
+                nodeSpacing: 30,
+                rankSpacing: 30,
+                padding: 15
+            },
+            sequence: {
+                diagramMarginX: 25,
+                diagramMarginY: 10,
+                boxTextMargin: 5,
+                noteMargin: 10,
+                messageMargin: 25
+            }
         });
         
+        // Manual initialization with error handling
         window.addEventListener('DOMContentLoaded', async function() {
             try {
-                await mermaid.run({ nodes: [document.getElementById('diagram')] });
-                (window as any).mermaidRenderComplete = true;
+                const element = document.getElementById('diagram');
+                if (element) {
+                    await mermaid.run({
+                        nodes: [element]
+                    });
+                    
+                    // Mark as complete for Puppeteer to detect
+                    window.mermaidRenderComplete = true;
+                    
+                    // Ensure proper sizing
+                    const svg = element.querySelector('svg');
+                    if (svg) {
+                        const bbox = svg.getBBox();
+                        svg.setAttribute('width', Math.max(bbox.width + 40, 100));
+                        svg.setAttribute('height', Math.max(bbox.height + 40, 100));
+                        svg.style.maxWidth = 'none';
+                        svg.style.height = 'auto';
+                    }
+                }
             } catch (error) {
-                console.error('Mermaid error:', error);
-                (window as any).mermaidRenderComplete = true;
-                (window as any).mermaidRenderError = error.message;
+                console.error('Mermaid rendering failed:', error);
+                window.mermaidRenderError = error.message;
+                
+                // Create fallback content
+                const element = document.getElementById('diagram');
+                if (element) {
+                    element.innerHTML = '<div style="border: 2px dashed #ccc; padding: 20px; text-align: center; color: #666;">Mermaid diagram failed to render:<br>' + error.message + '</div>';
+                }
+                window.mermaidRenderComplete = true;
             }
         });
     </script>
@@ -306,18 +493,22 @@ export class MermaidConverter {
         }
         
         .mermaid-diagram {
-            margin: 20px 0;
+            margin: 30px 0;
             text-align: center;
+            page-break-inside: avoid;
         }
         
         .mermaid-diagram img {
             max-width: 100%;
+            width: auto;
             height: auto;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 10px;
+            min-width: 400px;
+            border: 1px solid #e1e5e9;
+            border-radius: 12px;
+            padding: 20px;
             background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin: 10px 0;
         }
         
         .mermaid-error {
@@ -348,25 +539,38 @@ export class MermaidConverter {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: [
+          '--no-sandbox', 
+          '--disable-setuid-sandbox', 
+          '--disable-dev-shm-usage',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding'
+        ]
       });
     }
 
     const page = await this.browser.newPage();
     
     try {
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      // Set shorter timeout
+      page.setDefaultTimeout(10000);
       
-      // Wait for images to load
-      await page.evaluate(() => {
-        return Promise.all(
-          Array.from((document as any).images)
-            .filter((img: any) => !img.complete)
-            .map((img: any) => new Promise(resolve => {
-              img.onload = img.onerror = resolve;
-            }))
-        );
-      });
+      await page.setContent(html, { waitUntil: 'domcontentloaded' });
+      
+      // Wait for images to load with timeout
+      await Promise.race([
+        page.evaluate(() => {
+          return Promise.all(
+            Array.from((document as any).images)
+              .filter((img: any) => !img.complete)
+              .map((img: any) => new Promise(resolve => {
+                img.onload = img.onerror = resolve;
+              }))
+          );
+        }),
+        new Promise(resolve => setTimeout(resolve, 5000)) // 5 second timeout
+      ]);
       
       const pdfBuffer = await page.pdf({
         format: options.pageSize || 'A4',
