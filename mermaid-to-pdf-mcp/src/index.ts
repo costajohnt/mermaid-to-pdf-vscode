@@ -25,7 +25,7 @@ const converter = new MermaidConverter(logger);
 const server = new Server(
   {
     name: 'mermaid-to-pdf',
-    version: '1.0.7',
+    version: '1.0.10',
     description: 'MCP server for converting Markdown documents with Mermaid diagrams to professional PDFs',
   },
   {
@@ -39,7 +39,7 @@ const server = new Server(
 const TOOLS = {
   convertMarkdownToPdf: {
     name: 'convert_markdown_to_pdf',
-    description: 'Convert Markdown content with Mermaid diagrams to PDF. Returns base64 encoded PDF.',
+    description: 'Convert Markdown content with Mermaid diagrams to PDF. Saves PDF to file and returns file path.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -53,6 +53,10 @@ const TOOLS = {
             title: {
               type: 'string',
               description: 'Document title (default: "Converted Document")'
+            },
+            outputPath: {
+              type: 'string',
+              description: 'Output file path (default: ~/Desktop/[title].pdf)'
             },
             quality: {
               type: 'string',
@@ -79,6 +83,47 @@ const TOOLS = {
               },
               additionalProperties: false,
               description: 'Page margins (default: 20mm all sides)'
+            }
+          },
+          additionalProperties: false
+        }
+      },
+      required: ['markdown'],
+      additionalProperties: false
+    }
+  },
+
+  convertMarkdownToPdfData: {
+    name: 'convert_markdown_to_pdf_data',
+    description: 'Convert small Markdown content to PDF and return as base64 data (use for short documents only).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        markdown: {
+          type: 'string',
+          description: 'The Markdown content to convert (keep short to avoid 400 errors)'
+        },
+        options: {
+          type: 'object',
+          properties: {
+            title: {
+              type: 'string',
+              description: 'Document title (default: "Converted Document")'
+            },
+            quality: {
+              type: 'string',
+              enum: ['draft', 'standard', 'high'],
+              description: 'PDF quality level (default: "standard")'
+            },
+            theme: {
+              type: 'string',
+              enum: ['light', 'dark', 'auto'],
+              description: 'Theme for rendering (default: "light")'
+            },
+            pageSize: {
+              type: 'string',
+              enum: ['A4', 'Letter', 'Legal'],
+              description: 'Page size (default: "A4")'
             }
           },
           additionalProperties: false
@@ -200,6 +245,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
+        // Generate a default output path if not provided
+        const title = options.title || 'Document';
+        const safeTitle = title.replace(/[^a-zA-Z0-9\-_]/g, '_');
+        const defaultPath = `${process.env.HOME}/Desktop/${safeTitle}.pdf`;
+        const outputPath = options.outputPath || defaultPath;
+
+        // Use the file-to-file converter to save directly to disk
+        const result = await converter.convertFileToFileFromContent(markdown, outputPath, options as ConversionOptions);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                outputPath: result.outputPath,
+                metadata: result.metadata,
+                message: `PDF saved to: ${result.outputPath}`
+              }, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'convert_markdown_to_pdf_data': {
+        const { markdown, options = {} } = args as any;
+        
+        if (!markdown || typeof markdown !== 'string') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'markdown parameter is required and must be a string'
+          );
+        }
+
+        // Check content size to warn about potential 400 errors
+        if (markdown.length > 10000) {
+          logger.warn(`Large markdown content (${markdown.length} chars) may cause 400 error. Consider using convert_markdown_to_pdf instead.`);
+        }
+
         const result = await converter.convertMarkdownToPdf(markdown, options as ConversionOptions);
         
         return {
@@ -209,7 +293,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: JSON.stringify({
                 success: true,
                 pdfBase64: result.pdfBase64,
-                metadata: result.metadata
+                metadata: result.metadata,
+                warning: markdown.length > 10000 ? 'Large content may cause issues. Use convert_markdown_to_pdf for big documents.' : undefined
               }, null, 2)
             }
           ]
@@ -390,10 +475,23 @@ Your response: Create Markdown with:
 
 ## Tool Usage Patterns
 
-1. **convert_markdown_to_pdf**: Main tool for creating final PDF documents
-2. **validate_mermaid_syntax**: Use this first if you're unsure about diagram syntax
-3. **extract_mermaid_diagrams**: Useful for getting individual diagram images
-4. **convert_markdown_file_to_pdf**: When working with existing markdown files
+1. **convert_markdown_to_pdf**: Main tool for large documents - saves PDF to file (prevents 400 errors)
+2. **convert_markdown_to_pdf_data**: For small documents only - returns base64 data directly
+3. **validate_mermaid_syntax**: Use this first if you're unsure about diagram syntax
+4. **extract_mermaid_diagrams**: Useful for getting individual diagram images
+5. **convert_markdown_file_to_pdf**: When working with existing markdown files
+
+## Important: Avoiding 400 Errors
+
+**For comprehensive documentation with multiple diagrams:**
+- ALWAYS use \`convert_markdown_to_pdf\` (saves to file)
+- This prevents message size limits and 400 errors
+- Default saves to ~/Desktop/[title].pdf
+
+**For simple, short documents only:**
+- Use \`convert_markdown_to_pdf_data\` (returns base64)
+- Only for content under ~5000 characters
+- Will warn if content is too large
 
 ## Quality Tips
 - Always validate complex Mermaid syntax before conversion

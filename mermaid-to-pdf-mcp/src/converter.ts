@@ -14,12 +14,14 @@ import {
   ValidationResult,
   CacheEntry
 } from './types.js';
+import { DiagramAnalyzer, DiagramAnalysis } from './diagramAnalyzer.js';
 
 const execAsync = promisify(exec);
 
 export class MermaidConverter {
   private cache = new Map<string, CacheEntry>();
   private browser: puppeteer.Browser | null = null;
+  private analyzer = new DiagramAnalyzer();
   
   constructor(private logger: any) {}
 
@@ -117,8 +119,8 @@ export class MermaidConverter {
 
   private async convertUsingBrowser(markdown: string, options: ConversionOptions = {}, startTime: number): Promise<ConversionResult> {
     try {
-      // Process Mermaid diagrams
-      const { processedMarkdown, diagramCount } = await this.processMermaidDiagrams(markdown);
+      // Process Mermaid diagrams with page size awareness
+      const { processedMarkdown, diagramCount } = await this.processMermaidDiagrams(markdown, options.pageSize || 'A4');
       
       // Convert to HTML
       const html = this.markdownToHtml(processedMarkdown, options.title || 'Document');
@@ -167,6 +169,23 @@ export class MermaidConverter {
     };
   }
 
+  async convertFileToFileFromContent(
+    markdown: string,
+    outputPath: string,
+    options: ConversionOptions = {}
+  ): Promise<FileConversionResult> {
+    // Convert to PDF
+    const result = await this.convertMarkdownToPdf(markdown, options);
+    
+    // Write to file
+    await fs.writeFile(outputPath, Buffer.from(result.pdfBase64, 'base64'));
+    
+    return {
+      outputPath: outputPath,
+      metadata: result.metadata
+    };
+  }
+
   async extractMermaidDiagrams(markdown: string, format: 'png' | 'svg' = 'png'): Promise<MermaidDiagram[]> {
     const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
     const diagrams: MermaidDiagram[] = [];
@@ -175,7 +194,7 @@ export class MermaidConverter {
 
     while ((match = mermaidRegex.exec(markdown)) !== null) {
       const code = match[1].trim();
-      const imageBase64 = await this.renderMermaidDiagram(code, format);
+      const imageBase64 = await this.renderMermaidDiagram(code, format, 'A4'); // Default to A4 for extract
       
       diagrams.push({
         index: index++,
@@ -191,7 +210,7 @@ export class MermaidConverter {
   async validateMermaidSyntax(mermaidCode: string): Promise<ValidationResult> {
     try {
       // Attempt to render - if it succeeds, syntax is valid
-      await this.renderMermaidDiagram(mermaidCode, 'svg');
+      await this.renderMermaidDiagram(mermaidCode, 'svg', 'A4'); // Default to A4 for validation
       return { valid: true };
     } catch (error) {
       return {
@@ -201,7 +220,7 @@ export class MermaidConverter {
     }
   }
 
-  private async processMermaidDiagrams(markdown: string): Promise<{ processedMarkdown: string; diagramCount: number }> {
+  private async processMermaidDiagrams(markdown: string, pageSize: string = 'A4'): Promise<{ processedMarkdown: string; diagramCount: number }> {
     const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
     let processedMarkdown = markdown;
     let diagramCount = 0;
@@ -213,7 +232,7 @@ export class MermaidConverter {
       const mermaidCode = match[1].trim();
       
       try {
-        const imageBase64 = await this.renderMermaidDiagram(mermaidCode, 'png');
+        const imageBase64 = await this.renderMermaidDiagram(mermaidCode, 'png', pageSize);
         
         const imageHtml = `
 <div class="mermaid-diagram">
@@ -239,15 +258,24 @@ export class MermaidConverter {
     return { processedMarkdown, diagramCount };
   }
 
-  private async renderMermaidDiagram(mermaidCode: string, format: 'png' | 'svg'): Promise<string> {
-    // Check cache
-    const cacheKey = this.getCacheKey(mermaidCode, format);
+  private async renderMermaidDiagram(mermaidCode: string, format: 'png' | 'svg', pageSize: string = 'A4'): Promise<string> {
+    // Check cache (include pageSize in cache key for dynamic sizing)
+    const cacheKey = this.getCacheKey(mermaidCode + pageSize, format);
     const cached = this.cache.get(cacheKey);
     
     if (cached && Date.now() - cached.timestamp < 3600000) { // 1 hour cache
       this.logger.debug({ cacheKey }, 'Using cached diagram');
       return cached.imageBase64;
     }
+
+    // Phase 1: Analyze diagram for optimal sizing
+    const analysis = this.analyzer.analyze(mermaidCode, pageSize);
+    this.logger.info({
+      type: analysis.type,
+      complexity: analysis.complexity,
+      dimensions: analysis.estimatedDimensions,
+      viewport: analysis.recommendedViewport
+    }, 'Dynamic diagram analysis complete');
 
     // Ensure browser is initialized
     if (!this.browser) {
@@ -267,13 +295,19 @@ export class MermaidConverter {
     const page = await this.browser.newPage();
     
     try {
-      // Set viewport for consistent rendering - smaller for more compact diagrams
-      await page.setViewport({ width: 800, height: 600, deviceScaleFactor: 2 });
+      // Phase 2: Multi-pass rendering with dynamic viewport
+      await page.setViewport({
+        width: analysis.recommendedViewport.width,
+        height: analysis.recommendedViewport.height,
+        deviceScaleFactor: analysis.recommendedViewport.deviceScaleFactor
+      });
       
-      // Increase timeout for complex diagrams - use same as CLI
-      page.setDefaultTimeout(60000);
+      // Increase timeout for complex diagrams
+      const timeout = analysis.complexity === 'very-complex' ? 90000 : 60000;
+      page.setDefaultTimeout(timeout);
       
-      const html = this.getMermaidRenderHtml(mermaidCode);
+      // First pass: Render with analyzed configuration
+      const html = this.getMermaidRenderHtml(mermaidCode, analysis);
       await page.setContent(html, { 
         waitUntil: ['networkidle0', 'domcontentloaded']
       });
@@ -284,11 +318,36 @@ export class MermaidConverter {
         { timeout: 30000 }
       );
       
-      // Wait for Mermaid to render - use same timeout as CLI
+      // Wait for Mermaid to render
       await page.waitForFunction(
         () => (window as any).mermaidRenderComplete === true,
-        { timeout: 45000 }
+        { timeout: timeout - 15000 }
       );
+      
+      // Phase 3: Measure actual dimensions and adjust if needed
+      const actualDimensions = await page.evaluate(() => {
+        const svg = document.querySelector('.mermaid svg') as SVGSVGElement;
+        if (svg && svg.getBBox) {
+          const bbox = svg.getBBox();
+          return {
+            width: bbox.width,
+            height: bbox.height,
+            svgWidth: parseInt(svg.getAttribute('width') || '0'),
+            svgHeight: parseInt(svg.getAttribute('height') || '0')
+          };
+        }
+        return null;
+      });
+
+      if (actualDimensions) {
+        this.logger.info({
+          estimated: analysis.estimatedDimensions,
+          actual: actualDimensions
+        }, 'Diagram dimension comparison');
+        
+        // If actual dimensions are significantly different, we could re-render
+        // For now, we'll use the current render but log for future optimization
+      }
       
       let result: string;
       
@@ -320,7 +379,7 @@ export class MermaidConverter {
     }
   }
 
-  private getMermaidRenderHtml(mermaidCode: string): string {
+  private getMermaidRenderHtml(mermaidCode: string, analysis: DiagramAnalysis): string {
     return `
 <!DOCTYPE html>
 <html>
@@ -331,22 +390,28 @@ export class MermaidConverter {
     <style>
         body {
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             background: white;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            width: ${analysis.estimatedDimensions.width + 20}px;
+            box-sizing: border-box;
         }
         #mermaid-container {
-            display: inline-block;
-            min-width: 100px;
-            min-height: 100px;
+            display: block;
+            width: 100%;
+            max-width: ${analysis.estimatedDimensions.width}px;
+            margin: 0 auto;
         }
         .mermaid {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            width: 100%;
         }
-        /* Ensure SVG is visible */
+        /* Dynamic SVG constraints based on analysis */
         .mermaid svg {
-            max-width: 100%;
-            height: auto;
+            max-width: ${analysis.estimatedDimensions.width}px !important;
+            max-height: ${analysis.estimatedDimensions.height}px !important;
+            width: auto !important;
+            height: auto !important;
         }
     </style>
 </head>
@@ -358,31 +423,8 @@ ${mermaidCode}
     </div>
     
     <script>
-        // Initialize mermaid with better error handling
-        mermaid.initialize({ 
-            startOnLoad: false,
-            theme: 'default',
-            themeVariables: {
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
-                fontSize: '14px'
-            },
-            logLevel: 'error',
-            securityLevel: 'loose',
-            flowchart: {
-                htmlLabels: true,
-                useMaxWidth: false,
-                nodeSpacing: 30,
-                rankSpacing: 30,
-                padding: 15
-            },
-            sequence: {
-                diagramMarginX: 25,
-                diagramMarginY: 10,
-                boxTextMargin: 5,
-                noteMargin: 10,
-                messageMargin: 25
-            }
-        });
+        // Initialize mermaid with dynamic configuration from analysis
+        mermaid.initialize(${JSON.stringify(analysis.mermaidConfig, null, 12)});
         
         // Manual initialization with error handling
         window.addEventListener('DOMContentLoaded', async function() {
@@ -396,14 +438,32 @@ ${mermaidCode}
                     // Mark as complete for Puppeteer to detect
                     window.mermaidRenderComplete = true;
                     
-                    // Ensure proper sizing
+                    // Apply dynamic sizing from analysis
                     const svg = element.querySelector('svg');
                     if (svg) {
                         const bbox = svg.getBBox();
-                        svg.setAttribute('width', Math.max(bbox.width + 40, 100));
-                        svg.setAttribute('height', Math.max(bbox.height + 40, 100));
-                        svg.style.maxWidth = 'none';
-                        svg.style.height = 'auto';
+                        const maxWidth = ${analysis.estimatedDimensions.width};
+                        const maxHeight = ${analysis.estimatedDimensions.height};
+                        
+                        let width = Math.max(bbox.width + 20, 100);
+                        let height = Math.max(bbox.height + 20, 100);
+                        
+                        // Scale down if too large (respect dynamic constraints)
+                        if (width > maxWidth) {
+                            const scale = maxWidth / width;
+                            width = maxWidth;
+                            height = height * scale;
+                        }
+                        if (height > maxHeight) {
+                            const scale = maxHeight / height;
+                            height = maxHeight;
+                            width = width * scale;
+                        }
+                        
+                        svg.setAttribute('width', width);
+                        svg.setAttribute('height', height);
+                        svg.style.maxWidth = maxWidth + 'px';
+                        svg.style.maxHeight = maxHeight + 'px';
                     }
                 }
             } catch (error) {
@@ -493,22 +553,22 @@ ${mermaidCode}
         }
         
         .mermaid-diagram {
-            margin: 30px 0;
+            margin: 15px 0;
             text-align: center;
             page-break-inside: avoid;
+            overflow: hidden;
         }
         
         .mermaid-diagram img {
             max-width: 100%;
             width: auto;
             height: auto;
-            min-width: 400px;
             border: 1px solid #e1e5e9;
-            border-radius: 12px;
-            padding: 20px;
+            border-radius: 8px;
+            padding: 10px;
             background: white;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin: 10px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            object-fit: contain;
         }
         
         .mermaid-error {
@@ -524,8 +584,19 @@ ${mermaidCode}
         a:hover { text-decoration: underline; }
         
         @media print {
-            body { max-width: 100%; }
-            .mermaid-diagram { page-break-inside: avoid; }
+            body { 
+                max-width: 100%; 
+                padding: 20px 15px; 
+            }
+            .mermaid-diagram { 
+                page-break-inside: avoid; 
+                margin: 10px 0;
+                break-inside: avoid;
+            }
+            .mermaid-diagram img {
+                max-height: 450px;
+                padding: 8px;
+            }
         }
     </style>
 </head>

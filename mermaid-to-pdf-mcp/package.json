@@ -1,6 +1,6 @@
 {
   "name": "mermaid-to-pdf-mcp-server",
-  "version": "1.0.7",
+  "version": "1.0.10",
   "description": "MCP server for converting Markdown with Mermaid diagrams to PDF",
   "main": "dist/index.js",
   "type": "module",
