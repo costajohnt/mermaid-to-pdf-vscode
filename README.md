@@ -8,7 +8,7 @@ Transform your ideas into professional PDF documents with beautiful diagrams - j
 ![Version](https://img.shields.io/badge/version-1.0.0-orange)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-brightgreen)
 
-## 🤖 For AI Users (Claude Desktop)
+## 🤖 For AI Users (Claude Desktop & Claude Code)
 
 **The magic way**: Just ask your AI to create PDF documents with diagrams. The AI will automatically write beautiful documentation and convert it to PDF for you.
 
@@ -19,7 +19,7 @@ Transform your ideas into professional PDF documents with beautiful diagrams - j
    npm install -g mermaid-to-pdf-mcp-server
    ```
 
-2. **Add to Claude Desktop config** (`claude_desktop_config.json`):
+2. **Add to Claude config** (`claude_desktop_config.json` for both Claude Desktop and Claude Code):
    ```json
    {
      "mcpServers": {
@@ -31,7 +31,7 @@ Transform your ideas into professional PDF documents with beautiful diagrams - j
    }
    ```
 
-3. **Restart Claude Desktop**
+3. **Restart Claude Desktop or Claude Code**
 
 ### How to Use
 
