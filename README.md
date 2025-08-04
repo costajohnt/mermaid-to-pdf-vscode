@@ -25,34 +25,21 @@ mermaid-to-pdf document.md
 mermaid-to-pdf document.md -o output.pdf -t dark -q high
 ```
 
-### MCP Server (For LLMs like Claude Code)
+### MCP Server (For LLMs like Claude Desktop)
 
 ```bash
-npm install -g @mermaid-to-pdf/mcp-server
+npm install -g mermaid-to-pdf-mcp-server
 ```
 
-**Claude Code Setup:** Add to `.claude/settings.json`:
+**Claude Desktop Setup:** Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "mermaid-to-pdf": {
       "command": "mermaid-to-pdf-mcp",
-      "description": "Convert Markdown with Mermaid diagrams to PDF"
+      "args": []
     }
   }
-}
-```
-
-**VSCode MCP Setup:** Add to VSCode settings:
-```json
-{
-  "mcp.servers": [
-    {
-      "name": "mermaid-to-pdf",
-      "command": "mermaid-to-pdf-mcp",
-      "description": "Markdown + Mermaid to PDF converter"
-    }
-  ]
 }
 ```
 
@@ -72,10 +59,11 @@ npm install -g @mermaid-to-pdf/mcp-server
 
 ### MCP Server Features
 - 🤖 **LLM Optimized**: Built-in custom instructions guide LLMs on best practices
-- 🔌 **MCP Compatible**: Works with Claude Code, VSCode MCP, and other MCP clients
+- 🔌 **MCP Compatible**: Works with Claude Desktop and other MCP clients
 - 📝 **Content-based**: Convert Markdown content directly (no file I/O required)
 - 🎯 **Smart Guidance**: Provides workflow recommendations for creating visual documentation
 - 🔧 **Multiple Tools**: 5 specialized tools for different conversion needs
+- 🛡️ **Protocol Compliant**: Proper JSON-RPC communication with stderr logging
 
 ## 📋 CLI Options
 
@@ -196,6 +184,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
 
-- **Repository**: [https://github.com/costajohnt/mermaid-to-pdf-cli](https://github.com/costajohnt/mermaid-to-pdf-cli)
-- **Issues**: [GitHub Issues](https://github.com/costajohnt/mermaid-to-pdf-cli/issues)
+- **Repository**: [https://github.com/costajohnt/mermaid-to-pdf-vscode](https://github.com/costajohnt/mermaid-to-pdf-vscode)
+- **Issues**: [GitHub Issues](https://github.com/costajohnt/mermaid-to-pdf-vscode/issues)
+- **CLI Package**: [mermaid-to-pdf-cli](https://www.npmjs.com/package/mermaid-to-pdf-cli)
+- **MCP Package**: [mermaid-to-pdf-mcp-server](https://www.npmjs.com/package/mermaid-to-pdf-mcp-server)
 - **Mermaid Documentation**: [https://mermaid.js.org/](https://mermaid.js.org/)
