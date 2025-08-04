@@ -85,3 +85,5 @@ Examples:
 }
 
 main().catch(console.error);
+
+export { main };
