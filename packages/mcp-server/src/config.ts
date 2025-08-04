@@ -76,25 +76,10 @@ export function validateConfig(config: ServerConfig): void {
 }
 
 export function logConfig(config: ServerConfig, logger: any): void {
-  logger.info({
-    port: config.port,
-    host: config.host,
-    cache: {
-      enabled: config.cache.enabled,
-      backend: config.cache.backend,
-      ttl: config.cache.ttl,
-      maxSize: config.cache.maxSize
-    },
-    rateLimit: {
-      enabled: config.rateLimit.enabled,
-      windowMs: config.rateLimit.windowMs,
-      maxRequests: config.rateLimit.maxRequests
-    },
-    auth: {
-      enabled: config.auth?.enabled || false
-    },
-    monitoring: {
-      enabled: config.monitoring?.enabled || false
-    }
-  }, 'Server configuration loaded');
+  logger.info('Server configuration loaded');
+  logger.info(`Port: ${config.port}, Host: ${config.host}`);
+  logger.info(`Cache: ${config.cache.enabled ? 'enabled' : 'disabled'} (${config.cache.backend})`);
+  logger.info(`Rate limiting: ${config.rateLimit.enabled ? 'enabled' : 'disabled'}`);
+  logger.info(`Auth: ${config.auth?.enabled ? 'enabled' : 'disabled'}`);
+  logger.info(`Monitoring: ${config.monitoring?.enabled ? 'enabled' : 'disabled'}`);
 }
