@@ -1,41 +1,81 @@
-# Mermaid to PDF CLI Tool
+# Mermaid to PDF Tools
 
 Transform your Markdown documentation with Mermaid diagrams into professional PDFs with perfectly rendered diagrams embedded as high-quality images.
 
 ![CLI Tool](https://img.shields.io/badge/CLI-Tool-blue)
+![MCP Server](https://img.shields.io/badge/MCP-Server-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Version](https://img.shields.io/badge/version-1.0.0-orange)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-brightgreen)
 
 ## 🚀 Quick Installation
 
-### Install CLI Tool Globally
+### CLI Tool (Command Line)
 
 ```bash
 npm install -g mermaid-to-pdf-cli
 ```
 
-### Basic Usage
-
+**Usage:**
 ```bash
 # Convert a markdown file to PDF
 mermaid-to-pdf document.md
 
 # Custom output file and options
 mermaid-to-pdf document.md -o output.pdf -t dark -q high
+```
 
-# Show help
-mermaid-to-pdf --help
+### MCP Server (For LLMs like Claude Code)
+
+```bash
+npm install -g @mermaid-to-pdf/mcp-server
+```
+
+**Claude Code Setup:** Add to `.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "mermaid-to-pdf": {
+      "command": "mermaid-to-pdf-mcp",
+      "description": "Convert Markdown with Mermaid diagrams to PDF"
+    }
+  }
+}
+```
+
+**VSCode MCP Setup:** Add to VSCode settings:
+```json
+{
+  "mcp.servers": [
+    {
+      "name": "mermaid-to-pdf",
+      "command": "mermaid-to-pdf-mcp",
+      "description": "Markdown + Mermaid to PDF converter"
+    }
+  ]
+}
 ```
 
 ## ✨ Features
 
+### Core Features
 - 📄 **Smart Conversion**: Convert Markdown files to PDF with full formatting preservation
 - 🎨 **Diagram Rendering**: Automatically detect and render Mermaid diagrams as high-quality images
 - ⚡ **Performance Optimized**: Browser pooling and diagram caching for 30% faster conversion
-- 🖥️ **Command Line Interface**: Easy-to-use CLI with progress reporting
 - 🔧 **Configurable**: Customizable quality, themes, page sizes, and output paths
 - 🛡️ **Enterprise Ready**: Input validation, security features, and comprehensive error handling
+
+### CLI Tool Features
+- 🖥️ **Command Line Interface**: Easy-to-use CLI with progress reporting
+- 📁 **File-based**: Convert individual Markdown files to PDF
+- 🚀 **Standalone**: No dependencies on external services
+
+### MCP Server Features
+- 🤖 **LLM Optimized**: Built-in custom instructions guide LLMs on best practices
+- 🔌 **MCP Compatible**: Works with Claude Code, VSCode MCP, and other MCP clients
+- 📝 **Content-based**: Convert Markdown content directly (no file I/O required)
+- 🎯 **Smart Guidance**: Provides workflow recommendations for creating visual documentation
+- 🔧 **Multiple Tools**: 5 specialized tools for different conversion needs
 
 ## 📋 CLI Options
 
@@ -84,6 +124,59 @@ Convert to PDF:
 ```bash
 mermaid-to-pdf example.md -o architecture.pdf -t dark -q high
 ```
+
+## 🤖 MCP Server Usage
+
+### For LLMs (Recommended Workflow)
+
+When a user asks for documentation with diagrams:
+
+1. **Get custom instructions** (LLMs call this automatically):
+   ```json
+   {"name": "get_custom_instructions", "arguments": {}}
+   ```
+
+2. **Create rich Markdown content** with appropriate Mermaid diagrams:
+   - Flowcharts for processes and workflows
+   - Sequence diagrams for system interactions
+   - Class diagrams for software architecture  
+   - ER diagrams for database designs
+
+3. **Convert to professional PDF**:
+   ```json
+   {
+     "name": "convert_markdown_to_pdf",
+     "arguments": {
+       "markdown": "# My Document\n\n```mermaid\nflowchart TD\n    A[Start] --> B[End]\n```",
+       "options": {
+         "quality": "high",
+         "theme": "light"
+       }
+     }
+   }
+   ```
+
+### Available MCP Tools
+
+- **`convert_markdown_to_pdf`**: Convert content to PDF (returns base64)
+- **`convert_markdown_file_to_pdf`**: Convert file to file  
+- **`extract_mermaid_diagrams`**: Get individual diagram images
+- **`validate_mermaid_syntax`**: Check diagram syntax
+- **`get_custom_instructions`**: Get LLM guidance for optimal usage
+
+### Smart Guidance for LLMs
+
+The MCP server provides built-in instructions that guide LLMs to:
+- **Create comprehensive documentation** with appropriate diagrams
+- **Follow proven workflows** for visual content creation
+- **Use the right diagram types** for different scenarios
+- **Optimize PDF output** with proper quality and formatting settings
+
+**Example**: When user says *"Create API documentation"*, the LLM will automatically:
+1. Create Markdown with API architecture diagrams
+2. Add sequence diagrams for key endpoints  
+3. Include authentication flow charts
+4. Convert everything to a professional PDF
 
 ## 🔧 Requirements
 

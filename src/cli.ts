@@ -3,6 +3,7 @@
 import { readFileSync } from 'fs';
 import { resolve, basename } from 'path';
 import { FinalMermaidToPdfConverter } from './finalConverter.js';
+import { BrowserPool } from './browserPool.js';
 
 async function main() {
     const args = process.argv.slice(2);
@@ -78,8 +79,24 @@ Examples:
 
         console.log(`✅ PDF created successfully: ${result}`);
         
+        // Clean up browser pool to prevent hanging processes
+        const browserPool = BrowserPool.getInstance();
+        await browserPool.destroy();
+        
+        // Explicitly exit with success to prevent hanging
+        process.exit(0);
+        
     } catch (error) {
         console.error('❌ Conversion failed:', error);
+        
+        // Clean up browser pool even on error
+        try {
+            const browserPool = BrowserPool.getInstance();
+            await browserPool.destroy();
+        } catch (cleanupError) {
+            // Ignore cleanup errors
+        }
+        
         process.exit(1);
     }
 }
