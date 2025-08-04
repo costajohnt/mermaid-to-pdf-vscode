@@ -8,18 +8,18 @@ Transform your ideas into professional PDF documents with beautiful diagrams - j
 ![Version](https://img.shields.io/badge/version-1.0.0-orange)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-brightgreen)
 
-## 🤖 For AI Users (Claude Desktop & Claude Code)
+## 🤖 For AI Users
 
 **The magic way**: Just ask your AI to create PDF documents with diagrams. The AI will automatically write beautiful documentation and convert it to PDF for you.
 
-### Quick Setup
+### For Claude Desktop Users
 
 1. **Install the MCP server:**
    ```bash
    npm install -g mermaid-to-pdf-mcp-server
    ```
 
-2. **Add to Claude config** (`claude_desktop_config.json` for both Claude Desktop and Claude Code):
+2. **Add to Claude Desktop config** (`claude_desktop_config.json`):
    ```json
    {
      "mcpServers": {
@@ -31,7 +31,74 @@ Transform your ideas into professional PDF documents with beautiful diagrams - j
    }
    ```
 
-3. **Restart Claude Desktop or Claude Code**
+3. **Restart Claude Desktop**
+
+### For Claude Code Users (CLI Tool)
+
+If you only use Claude Code and don't have Claude Desktop, you can still use the MCP server:
+
+1. **Install the MCP server:**
+   ```bash
+   npm install -g mermaid-to-pdf-mcp-server
+   ```
+
+2. **Create the Claude config directory and file:**
+
+   **On macOS:**
+   ```bash
+   # Create config directory
+   mkdir -p ~/Library/Application\ Support/Claude
+   
+   # Create config file
+   cat > ~/Library/Application\ Support/Claude/claude_desktop_config.json << 'EOF'
+   {
+     "mcpServers": {
+       "mermaid-to-pdf": {
+         "command": "mermaid-to-pdf-mcp",
+         "args": []
+       }
+     }
+   }
+   EOF
+   ```
+
+   **On Windows:**
+   ```powershell
+   # Create config directory
+   New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude"
+   
+   # Create config file
+   @'
+   {
+     "mcpServers": {
+       "mermaid-to-pdf": {
+         "command": "mermaid-to-pdf-mcp",
+         "args": []
+       }
+     }
+   }
+   '@ | Out-File -FilePath "$env:APPDATA\Claude\claude_desktop_config.json" -Encoding UTF8
+   ```
+
+   **On Linux:**
+   ```bash
+   # Create config directory
+   mkdir -p ~/.config/Claude
+   
+   # Create config file
+   cat > ~/.config/Claude/claude_desktop_config.json << 'EOF'
+   {
+     "mcpServers": {
+       "mermaid-to-pdf": {
+         "command": "mermaid-to-pdf-mcp",
+         "args": []
+       }
+     }
+   }
+   EOF
+   ```
+
+3. **Restart Claude Code** (if it's running)
 
 ### How to Use
 
