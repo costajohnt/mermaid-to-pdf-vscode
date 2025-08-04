@@ -2,7 +2,7 @@
  * Batch Processing Service
  */
 
-import { MarkdownMermaidConverter, ConversionInput, ConversionOutput } from '@mermaid-converter/core';
+import { MarkdownMermaidConverter, ConversionInput, ConversionOutput } from 'mermaid-converter-core';
 import { 
   BatchConversionInput,
   BatchConversionResult,

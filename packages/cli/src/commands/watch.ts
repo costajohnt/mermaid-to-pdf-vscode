@@ -10,7 +10,7 @@ import {
   createConverter, 
   PDFGenerator, 
   MermaidRenderer 
-} from '@mermaid-converter/core';
+} from 'mermaid-converter-core';
 import { logger } from '../utils/logger.js';
 import { getTemplate } from '../utils/templates.js';
 import { formatBytes, formatDuration } from '../utils/format.js';

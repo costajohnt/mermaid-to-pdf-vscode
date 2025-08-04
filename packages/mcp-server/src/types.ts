@@ -2,7 +2,7 @@
  * Enhanced MCP Server Types
  */
 
-import { ConversionInput, ConversionOutput } from '@mermaid-converter/core';
+import { ConversionInput, ConversionOutput } from 'mermaid-converter-core';
 
 // Extended conversion types
 export interface BatchConversionInput {

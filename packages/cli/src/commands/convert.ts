@@ -14,7 +14,7 @@ import {
   GoogleSlidesGenerator,
   MermaidRenderer,
   ConversionOutput 
-} from '@mermaid-converter/core';
+} from 'mermaid-converter-core';
 import { logger } from '../utils/logger.js';
 import { getTemplate, BUILT_IN_TEMPLATES } from '../utils/templates.js';
 import { createProgressBar } from '../utils/progress.js';

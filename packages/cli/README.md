@@ -1,11 +1,11 @@
-# Mermaid Converter CLI
+# mermaid-converter-cli
 
-> Convert Markdown files with Mermaid diagrams to PDF and other formats from the command line
+> A powerful command-line tool for converting Markdown documents with Mermaid diagrams to various formats including PDF and Google Slides
 
 ## Installation
 
 ```bash
-npm install -g @mermaid-converter/cli
+npm install -g mermaid-converter-cli
 ```
 
 ## Quick Start
@@ -26,12 +26,13 @@ mermaid-convert watch docs/
 
 ## Features
 
-- 🚀 **Fast conversions** with high-quality Mermaid diagram rendering
-- 📋 **6 built-in templates** for different use cases
-- 📦 **Batch processing** with progress bars and concurrent conversions
-- 👁️ **Watch mode** for automatic conversion on file changes
-- ⚙️ **Configurable** with project-level configuration files
-- 🎨 **Professional output** with customizable formatting options
+- 📄 **PDF Generation** - High-quality PDF output with embedded Mermaid diagrams
+- 🎯 **Google Slides Integration** - Convert markdown to presentations with smart slide mapping
+- 📊 **Batch Processing** - Convert multiple files concurrently with progress tracking
+- 👁️ **Watch Mode** - Auto-convert files when they change
+- 🎨 **6 Built-in Templates** - Professional designs for different use cases
+- ⚙️ **Configurable** - Project-level configuration with multiple format support
+- 🚀 **Fast & Efficient** - Browser pooling and intelligent caching
 
 ## Commands
 
@@ -44,13 +45,15 @@ mermaid-convert convert input.md [options]
 ```
 
 **Options:**
-- `-f, --format <format>` - Output format (default: pdf)
+- `-f, --format <format>` - Output format: pdf, google-slides (default: pdf)
 - `-o, --output <file>` - Output file (single file mode)
 - `-d, --output-dir <dir>` - Output directory (batch mode)
 - `-t, --template <name>` - Template to use (default: default)
 - `-b, --batch` - Enable batch processing for multiple files
 - `-c, --concurrency <n>` - Number of concurrent conversions (default: 3)
 - `--overwrite` - Overwrite existing files
+- `--google-auth <path>` - Path to Google service account JSON file (for Google Slides)
+- `--verbose` - Show detailed logs
 
 **Examples:**
 ```bash
@@ -65,6 +68,12 @@ mermaid-convert convert docs/*.md --batch -d output -t report -c 5
 
 # Convert multiple files with glob pattern
 mermaid-convert convert "src/**/*.md" --batch -d dist/
+
+# Convert to Google Slides
+mermaid-convert convert presentation.md -f google-slides
+
+# Google Slides with custom theme
+mermaid-convert convert slides.md -f google-slides --template '{"theme": "modern"}'
 ```
 
 ### `watch` - Monitor files for changes
@@ -140,6 +149,20 @@ mermaid-convert config --init
 # Show current config
 mermaid-convert config --show
 ```
+
+## Google Slides Setup
+
+To use Google Slides integration:
+
+1. **Create a Google Cloud project**
+2. **Enable Google Slides and Drive APIs**
+3. **Create a service account with credentials**
+4. **Download the JSON key file**
+5. Either:
+   - Set `GOOGLE_APPLICATION_CREDENTIALS` environment variable
+   - Use `--google-auth` flag with path to JSON file
+
+For detailed instructions, see the [Google Slides Authentication Guide](https://github.com/costajohnt/mermaid-to-pdf-vscode/blob/main/docs/GOOGLE_SLIDES_AUTH.md).
 
 ## Templates
 
@@ -295,5 +318,5 @@ MIT License - see LICENSE file for details
 
 ## Related Packages
 
-- `@mermaid-converter/core` - Core conversion library
-- `@mermaid-converter/mcp-server` - MCP server for Claude Desktop integration
+- `mermaid-converter-core` - Core conversion library
+- `mermaid-converter-mcp-server` - MCP server for Claude Desktop integration

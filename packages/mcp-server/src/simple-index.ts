@@ -19,7 +19,7 @@ import {
   PDFGenerator,
   MermaidRenderer,
   BrowserPool
-} from '@mermaid-converter/core';
+} from 'mermaid-converter-core';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

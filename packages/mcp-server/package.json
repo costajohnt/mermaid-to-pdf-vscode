@@ -1,5 +1,5 @@
 {
-  "name": "@mermaid-converter/mcp-server",
+  "name": "mermaid-converter-mcp-server",
   "version": "1.0.0",
   "description": "Enhanced MCP server for advanced Markdown + Mermaid conversion with batch processing and templates",
   "main": "dist/index.js",
@@ -35,8 +35,27 @@
   ],
   "author": "John Costa",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/costajohnt/mermaid-to-pdf-vscode.git",
+    "directory": "packages/mcp-server"
+  },
+  "homepage": "https://github.com/costajohnt/mermaid-to-pdf-vscode/tree/main/packages/mcp-server",
+  "bugs": {
+    "url": "https://github.com/costajohnt/mermaid-to-pdf-vscode/issues"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "simple-index.js",
+    "server.cjs"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
-    "@mermaid-converter/core": "file:../core",
+    "mermaid-converter-core": "^1.0.0",
     "@modelcontextprotocol/sdk": "^0.5.0",
     "express": "^4.18.2",
     "ioredis": "^5.3.2",

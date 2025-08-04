@@ -8,7 +8,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { createConverter } from '@mermaid-converter/core';
+import { createConverter } from 'mermaid-converter-core';
 import { convertCommand } from './commands/convert.js';
 import { watchCommand } from './commands/watch.js';
 import { templatesCommand } from './commands/templates.js';

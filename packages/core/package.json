@@ -1,5 +1,5 @@
 {
-  "name": "@mermaid-converter/core",
+  "name": "mermaid-converter-core",
   "version": "1.0.0",
   "description": "Core library for converting Markdown with Mermaid diagrams to various formats",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
     "directory": "packages/core"
   },
   "files": [
-    "dist",
+    "dist/**/*",
     "README.md",
     "LICENSE"
   ],

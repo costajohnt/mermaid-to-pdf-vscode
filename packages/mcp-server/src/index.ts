@@ -25,7 +25,7 @@ import {
   PDFGenerator,
   MermaidRenderer,
   BrowserPool
-} from '@mermaid-converter/core';
+} from 'mermaid-converter-core';
 
 import { createDefaultConfig, validateConfig, logConfig } from './config.js';
 import { createCacheService } from './services/cache.js';
