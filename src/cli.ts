@@ -10,10 +10,10 @@ async function main() {
     
     if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
         console.log(`
-Mermaid to PDF CLI Tool
+Markdown Mermaid Converter CLI Tool
 
 Usage:
-  mermaid-to-pdf <input.md> [options]
+  markdown-mermaid-converter <input.md> [options]
 
 Options:
   -o, --output <file>    Output PDF file path (default: input.pdf)
@@ -23,8 +23,8 @@ Options:
   -h, --help            Show this help message
 
 Examples:
-  mermaid-to-pdf document.md
-  mermaid-to-pdf document.md -o output.pdf -t dark -q high
+  markdown-mermaid-converter document.md
+  markdown-mermaid-converter document.md -o output.pdf -t dark -q high
         `);
         process.exit(0);
     }

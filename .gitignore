@@ -13,10 +13,9 @@ node_modules/
 out/
 dist/
 
-# VSCode Extension specific
-*.vsix
-.vscode-test/
+# IDE specific
 .vscode/
+.idea/
 
 # OS specific
 .DS_Store

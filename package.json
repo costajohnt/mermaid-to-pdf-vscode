@@ -1,11 +1,11 @@
 {
-  "name": "mermaid-to-pdf-cli",
-  "description": "CLI tool to convert Markdown files with Mermaid diagrams to PDF",
+  "name": "markdown-mermaid-converter-cli",
+  "description": "CLI tool to convert Markdown files with Mermaid diagrams to various formats (PDF, etc.)",
   "version": "1.0.0",
-  "author": "Mermaid to PDF Team",
+  "author": "Markdown Mermaid Converter Team",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/costajohnt/mermaid-to-pdf-cli.git"
+    "url": "git+https://github.com/costajohnt/markdown-mermaid-converter.git"
   },
   "license": "MIT",
   "engines": {
@@ -14,7 +14,7 @@
   "type": "module",
   "main": "./dist/cli.js",
   "bin": {
-    "mermaid-to-pdf": "dist/cli.js"
+    "markdown-mermaid-converter": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -24,12 +24,14 @@
     "lint": "eslint src --ext ts"
   },
   "keywords": [
-    "mermaid",
-    "pdf",
     "markdown",
-    "cli",
+    "mermaid",
     "converter",
-    "diagrams"
+    "cli",
+    "pdf",
+    "diagrams",
+    "documentation",
+    "format-conversion"
   ],
   "devDependencies": {
     "@types/node": "^20.11.0",
