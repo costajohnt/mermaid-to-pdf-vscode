@@ -1,6 +1,6 @@
-# Mermaid to PDF Tools
+# Markdown Mermaid Converter
 
-Transform your ideas into professional PDF documents with beautiful diagrams - just by asking for them.
+Transform your ideas into professional documents with beautiful diagrams - just by asking for them. Convert Markdown with Mermaid diagrams to various formats including PDF.
 
 ![MCP Server](https://img.shields.io/badge/MCP-Server-purple)
 ![CLI Tool](https://img.shields.io/badge/CLI-Tool-blue)
@@ -16,15 +16,15 @@ Transform your ideas into professional PDF documents with beautiful diagrams - j
 
 1. **Install the MCP server:**
    ```bash
-   npm install -g mermaid-to-pdf-mcp-server
+   npm install -g markdown-mermaid-converter-mcp
    ```
 
 2. **Add to Claude Desktop config** (`claude_desktop_config.json`):
    ```json
    {
      "mcpServers": {
-       "mermaid-to-pdf": {
-         "command": "mermaid-to-pdf-mcp",
+       "markdown-mermaid-converter": {
+         "command": "markdown-mermaid-converter-mcp",
          "args": []
        }
      }
@@ -39,26 +39,26 @@ If you use Claude Code, you can configure the MCP server using Claude Code's bui
 
 1. **Install the MCP server:**
    ```bash
-   npm install -g mermaid-to-pdf-mcp-server
+   npm install -g markdown-mermaid-converter-mcp
    ```
 
 2. **Add the MCP server to Claude Code:**
 
    **Option A: User scope (available across all projects):**
    ```bash
-   claude mcp add --scope user mermaid-to-pdf mermaid-to-pdf-mcp
+   claude mcp add --scope user markdown-mermaid-converter markdown-mermaid-converter-mcp
    ```
 
    **Option B: Project scope (for a specific project, creates `.mcp.json`):**
    ```bash
    # Navigate to your project directory first
-   claude mcp add --scope project mermaid-to-pdf mermaid-to-pdf-mcp
+   claude mcp add --scope project markdown-mermaid-converter markdown-mermaid-converter-mcp
    ```
 
    **Option C: Local scope (private to you in current project):**
    ```bash
    # Navigate to your project directory first  
-   claude mcp add --scope local mermaid-to-pdf mermaid-to-pdf-mcp
+   claude mcp add --scope local markdown-mermaid-converter markdown-mermaid-converter-mcp
    ```
 
 3. **Verify the server is configured:**
@@ -72,8 +72,8 @@ You can also create a `.mcp.json` file in your project root:
 ```json
 {
   "mcpServers": {
-    "mermaid-to-pdf": {
-      "command": "mermaid-to-pdf-mcp",
+    "markdown-mermaid-converter": {
+      "command": "markdown-mermaid-converter-mcp",
       "args": []
     }
   }
@@ -115,23 +115,23 @@ The AI will automatically:
 ### Installation
 
 ```bash
-npm install -g mermaid-to-pdf-cli
+npm install -g markdown-mermaid-converter-cli
 ```
 
 ### Basic Usage
 
 ```bash
 # Convert any markdown file to PDF
-mermaid-to-pdf your-document.md
+markdown-mermaid-converter your-document.md
 
 # With custom options
-mermaid-to-pdf document.md -o output.pdf -t dark -q high
+markdown-mermaid-converter document.md -o output.pdf -t dark -q high
 ```
 
 ### CLI Options
 
 ```bash
-Usage: mermaid-to-pdf <input.md> [options]
+Usage: markdown-mermaid-converter <input.md> [options]
 
 Options:
   -o, --output <file>    Output PDF file path (default: input.pdf)
@@ -259,10 +259,10 @@ mermaid-to-pdf architecture.md -q high -t light
 
 ## 🔗 Links
 
-- **Repository**: [https://github.com/costajohnt/mermaid-to-pdf-vscode](https://github.com/costajohnt/mermaid-to-pdf-vscode)
-- **Issues**: [GitHub Issues](https://github.com/costajohnt/mermaid-to-pdf-vscode/issues)
-- **CLI Package**: [mermaid-to-pdf-cli](https://www.npmjs.com/package/mermaid-to-pdf-cli)
-- **MCP Package**: [mermaid-to-pdf-mcp-server](https://www.npmjs.com/package/mermaid-to-pdf-mcp-server)
+- **Repository**: [https://github.com/costajohnt/markdown-mermaid-converter](https://github.com/costajohnt/markdown-mermaid-converter)
+- **Issues**: [GitHub Issues](https://github.com/costajohnt/markdown-mermaid-converter/issues)
+- **CLI Package**: [markdown-mermaid-converter-cli](https://www.npmjs.com/package/markdown-mermaid-converter-cli)
+- **MCP Package**: [markdown-mermaid-converter-mcp](https://www.npmjs.com/package/markdown-mermaid-converter-mcp)
 - **Mermaid Documentation**: [https://mermaid.js.org/](https://mermaid.js.org/)
 
 ---

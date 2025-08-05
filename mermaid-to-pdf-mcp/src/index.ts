@@ -125,9 +125,9 @@ function cancelBrowserCleanup() {
 // Create MCP server
 const server = new Server(
   {
-    name: 'mermaid-to-pdf',
-    version: '2.0.0',
-    description: 'Optimized MCP server for converting Markdown with Mermaid diagrams to PDF - 75% faster with enhanced stability',
+    name: 'markdown-mermaid-converter',
+    version: '1.0.0',
+    description: 'MCP server for converting Markdown with Mermaid diagrams to various formats - optimized for AI integration',
   },
   {
     capabilities: {

@@ -1,7 +1,7 @@
 {
-  "name": "mermaid-to-pdf-mcp-server",
-  "version": "2.1.1",
-  "description": "Optimized MCP server for converting Markdown with Mermaid diagrams to PDF - 75% faster with enhanced stability",
+  "name": "markdown-mermaid-converter-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for converting Markdown with Mermaid diagrams to various formats - optimized for AI integration",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
@@ -12,12 +12,15 @@
   },
   "keywords": [
     "mcp",
-    "mermaid",
-    "pdf",
     "markdown",
-    "converter"
+    "mermaid",
+    "converter",
+    "pdf",
+    "ai-integration",
+    "claude",
+    "diagrams"
   ],
-  "author": "Mermaid to PDF Team",
+  "author": "Markdown Mermaid Converter Team",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.1",
@@ -32,6 +35,6 @@
     "typescript": "^5.0.0"
   },
   "bin": {
-    "mermaid-to-pdf-mcp": "dist/index.js"
+    "markdown-mermaid-converter-mcp": "dist/index.js"
   }
 }

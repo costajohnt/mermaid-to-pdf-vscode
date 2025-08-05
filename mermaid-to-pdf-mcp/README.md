@@ -22,8 +22,8 @@ npm install -g @mermaid-to-pdf/mcp-server
 ### Option 2: Install from Source
 
 ```bash
-git clone https://github.com/costajohnt/mermaid-to-pdf-vscode.git
-cd mermaid-to-pdf-vscode/mermaid-to-pdf-mcp
+git clone https://github.com/costajohnt/markdown-mermaid-converter.git
+cd markdown-mermaid-converter/mermaid-to-pdf-mcp
 npm install
 npm run build
 npm link
@@ -48,9 +48,9 @@ Add to your Claude Code settings (`.claude/settings.json`):
 
 Then restart Claude Code to load the MCP server.
 
-### For VSCode with MCP Extension
+### For Development Tools with MCP Support
 
-Add to your VSCode settings:
+Add to your development tool's MCP configuration:
 
 ```json
 {
@@ -303,8 +303,8 @@ DEBUG=mcp:* mermaid-to-pdf-mcp
 
 ### Building from Source
 ```bash
-git clone https://github.com/costajohnt/mermaid-to-pdf-vscode.git
-cd mermaid-to-pdf-vscode/mermaid-to-pdf-mcp
+git clone https://github.com/costajohnt/markdown-mermaid-converter.git
+cd markdown-mermaid-converter/mermaid-to-pdf-mcp
 npm install
 npm run build
 ```
@@ -324,9 +324,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Links
 
-- **Repository**: [GitHub](https://github.com/costajohnt/mermaid-to-pdf-vscode)
-- **CLI Tool**: [Mermaid to PDF CLI](https://github.com/costajohnt/mermaid-to-pdf-vscode)
-- **Issues**: [GitHub Issues](https://github.com/costajohnt/mermaid-to-pdf-vscode/issues)
+- **Repository**: [GitHub](https://github.com/costajohnt/markdown-mermaid-converter)
+- **CLI Tool**: [Markdown Mermaid Converter CLI](https://github.com/costajohnt/markdown-mermaid-converter)
+- **Issues**: [GitHub Issues](https://github.com/costajohnt/markdown-mermaid-converter/issues)
 - **MCP Protocol**: [Model Context Protocol](https://modelcontextprotocol.io)
 
 ---

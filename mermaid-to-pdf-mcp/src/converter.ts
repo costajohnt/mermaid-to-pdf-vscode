@@ -53,9 +53,9 @@ export class MermaidConverter {
       await fs.writeFile(inputFile, markdown, 'utf-8');
       
       // Try to find the CLI tool - check if globally installed
-      let cliCommand = 'mermaid-to-pdf';
+      let cliCommand = 'markdown-mermaid-converter';
       try {
-        const { stdout: whichOutput } = await execAsync('which mermaid-to-pdf');
+        const { stdout: whichOutput } = await execAsync('which markdown-mermaid-converter');
         this.logger.info(`Found CLI tool at: ${whichOutput.trim()}`);
       } catch (whichError) {
         this.logger.warn({ whichError }, 'Global CLI not found, trying local version');
