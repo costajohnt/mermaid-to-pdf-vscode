@@ -1,6 +1,6 @@
 {
   "name": "mermaid-to-pdf-mcp-server",
-  "version": "2.0.0",
+  "version": "2.1.1",
   "description": "Optimized MCP server for converting Markdown with Mermaid diagrams to PDF - 75% faster with enhanced stability",
   "main": "dist/index.js",
   "type": "module",
