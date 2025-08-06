@@ -410,15 +410,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           dataLength: att.data ? att.data.length : 0
         }));
 
+        // Truncate the document body to avoid token limits while preserving structure
+        const maxBodyLength = 500; // Keep XML structure visible but truncated
+        const originalBody = result.document.body.storage.value;
+        const truncatedBody = originalBody.length > maxBodyLength 
+          ? originalBody.substring(0, maxBodyLength) + "...[truncated - full XML available via CLI]"
+          : originalBody;
+
         const outputContent = JSON.stringify({
           document: {
             ...result.document,
+            body: {
+              storage: {
+                value: truncatedBody,
+                representation: 'storage'
+              }
+            },
             // Remove attachments from document to avoid duplication
             attachments: undefined
           },
           attachments: attachmentSummary,
           warnings: result.warnings,
-          note: "Base64 image data excluded from MCP response to avoid token limits. Use CLI for full output with attachments."
+          note: "Document body and base64 image data truncated for MCP response. Use CLI for full output.",
+          fullBodyLength: originalBody.length
         });
 
         return {

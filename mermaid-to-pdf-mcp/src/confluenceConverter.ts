@@ -59,19 +59,23 @@ export class SimplifiedConfluenceConverter {
     // Extract title from markdown if not provided
     const documentTitle = this.options.title || this.extractTitleFromMarkdown(markdown) || 'Untitled Document';
     
-    // Process Mermaid diagrams with actual rendering if converter provided
+    // Process Mermaid diagrams and use placeholders to avoid markdown parser escaping XML
     let processedContent: string;
+    const replacements = new Map<string, string>();
+    
     if (converter) {
-      processedContent = await this.processMermaidDiagrams(markdown, converter);
+      processedContent = await this.processMermaidDiagramsWithPlaceholders(markdown, converter, replacements);
     } else {
-      processedContent = await this.processMermaidDiagramsFallback(markdown);
+      processedContent = await this.processMermaidDiagramsFallbackWithPlaceholders(markdown, replacements);
     }
     
-    // Convert markdown to Confluence XML
+    // Convert markdown to Confluence XML (with placeholders)
     let confluenceXml = this.markdownToConfluence(processedContent);
     
-    // Post-process to replace diagram placeholders
-    confluenceXml = this.replaceDiagramPlaceholders(confluenceXml);
+    // Replace placeholders with actual XML AFTER markdown processing
+    for (const [placeholder, xmlContent] of replacements) {
+      confluenceXml = confluenceXml.replace(placeholder, xmlContent);
+    }
     
     // Build document
     const document: ConfluenceDocument = {
@@ -138,31 +142,63 @@ export class SimplifiedConfluenceConverter {
   private replaceDiagramPlaceholders(content: string): string {
     let processedContent = content;
     
-    // Replace diagram placeholders
+    // Replace diagram placeholders - the markdown parser may have converted HTML comments to different formats
     for (const [id, attachment] of this.attachments) {
       if (id.startsWith('image_')) {
-        // Base64 embedded image placeholder
-        const placeholder = `<!-- CONFLUENCE_IMAGE_PLACEHOLDER_${id.replace('image_', '')} -->`;
+        // Base64 embedded image placeholder - try multiple formats that markdown might have created
+        const baseId = id.replace('image_', '');
+        const placeholders = [
+          `<!-- CONFLUENCE_IMAGE_PLACEHOLDER_${baseId} -->`,
+          `<strong>CONFLUENCE_IMAGE_PLACEHOLDER_${baseId}</strong>`,
+          `<p><strong>CONFLUENCE_IMAGE_PLACEHOLDER_${baseId}</strong></p>`
+        ];
+        
         const dataUrl = `data:image/png;base64,${attachment.data}`;
         const imageXml = `<ac:image ac:alt="Mermaid Diagram">
       <ri:url ri:value="${this.escapeXml(dataUrl)}" />
     </ac:image>`;
-        processedContent = processedContent.replace(placeholder, imageXml);
+        
+        for (const placeholder of placeholders) {
+          if (processedContent.includes(placeholder)) {
+            processedContent = processedContent.replace(placeholder, imageXml);
+          }
+        }
       } else if (id.startsWith('code_')) {
         // Code block placeholder
-        const placeholder = `{{CONFLUENCE_CODE_PLACEHOLDER_${id.replace('code_', '')}}}`;
+        const baseId = id.replace('code_', '');
+        const placeholders = [
+          `{{CONFLUENCE_CODE_PLACEHOLDER_${baseId}}}`,
+          `<strong>CONFLUENCE_CODE_PLACEHOLDER_${baseId}</strong>`,
+          `<p><strong>CONFLUENCE_CODE_PLACEHOLDER_${baseId}</strong></p>`
+        ];
+        
         const codeXml = `<ac:macro ac:name="code">
       <ac:parameter ac:name="language">mermaid</ac:parameter>
       <ac:plain-text-body><![CDATA[${attachment.comment}]]></ac:plain-text-body>
     </ac:macro>`;
-        processedContent = processedContent.replace(placeholder, codeXml);
+        
+        for (const placeholder of placeholders) {
+          if (processedContent.includes(placeholder)) {
+            processedContent = processedContent.replace(placeholder, codeXml);
+          }
+        }
       } else {
-        // Attachment reference placeholder
-        const placeholder = `<!-- CONFLUENCE_DIAGRAM_PLACEHOLDER_${id} -->`;
+        // Regular attachment reference placeholder - try multiple formats
+        const placeholders = [
+          `<!-- CONFLUENCE_DIAGRAM_PLACEHOLDER_${id} -->`,
+          `<strong>CONFLUENCE_DIAGRAM_PLACEHOLDER_${id}</strong>`,
+          `<p><strong>CONFLUENCE_DIAGRAM_PLACEHOLDER_${id}</strong></p>`
+        ];
+        
         const attachmentXml = `<ac:image ac:title="${id}.png">
         <ri:attachment ri:filename="${id}.png" />
       </ac:image>`;
-        processedContent = processedContent.replace(placeholder, attachmentXml);
+      
+        for (const placeholder of placeholders) {
+          if (processedContent.includes(placeholder)) {
+            processedContent = processedContent.replace(placeholder, attachmentXml);
+          }
+        }
       }
     }
     
@@ -175,6 +211,178 @@ export class SimplifiedConfluenceConverter {
       return h1Match[1].trim();
     }
     return null;
+  }
+
+  async processMermaidDiagramsWithPlaceholders(content: string, converter: any, replacements: Map<string, string>): Promise<string> {
+    const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
+    let processedContent = content;
+    const matches = [...content.matchAll(mermaidRegex)];
+
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
+      const mermaidCode = match[1].trim();
+      const diagramId = `mermaid_diagram_${this.mermaidCounter++}`;
+      
+      try {
+        // Use the main converter to render the diagram
+        const diagrams = await converter.extractMermaidDiagrams(`\`\`\`mermaid\n${mermaidCode}\n\`\`\``, 'png');
+        
+        if (diagrams && diagrams.length > 0) {
+          const diagram = diagrams[0];
+          
+          // Always use base64 data URL embedding for now to avoid attachment complexity
+          const dataUrl = `data:image/png;base64,${diagram.imageBase64}`;
+          const imageXml = `<ac:image ac:alt="Mermaid Diagram">
+    <ri:url ri:value="${this.escapeXml(dataUrl)}" />
+</ac:image>`;
+          
+          // Use a safe placeholder that won't be processed by markdown
+          const placeholder = `CONFLUENCE_SAFE_PLACEHOLDER_${diagramId}`;
+          replacements.set(placeholder, imageXml);
+          processedContent = processedContent.replace(match[0], placeholder);
+        } else {
+          throw new Error('Failed to render diagram');
+        }
+      } catch (error) {
+        // Fallback to code block
+        const fallbackContent = `<ac:macro ac:name="code">
+    <ac:parameter ac:name="language">mermaid</ac:parameter>
+    <ac:plain-text-body><![CDATA[${mermaidCode}]]></ac:plain-text-body>
+</ac:macro>`;
+        const placeholder = `CONFLUENCE_SAFE_PLACEHOLDER_${diagramId}`;
+        replacements.set(placeholder, fallbackContent);
+        processedContent = processedContent.replace(match[0], placeholder);
+      }
+    }
+
+    return processedContent;
+  }
+
+  async processMermaidDiagramsDirectly(content: string, converter: any): Promise<string> {
+    const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
+    let processedContent = content;
+    const matches = [...content.matchAll(mermaidRegex)];
+
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
+      const mermaidCode = match[1].trim();
+      const diagramId = `mermaid_diagram_${this.mermaidCounter++}`;
+      
+      try {
+        // Use the main converter to render the diagram
+        const diagrams = await converter.extractMermaidDiagrams(`\`\`\`mermaid\n${mermaidCode}\n\`\`\``, 'png');
+        
+        if (diagrams && diagrams.length > 0) {
+          const diagram = diagrams[0];
+          
+          // Always use base64 data URL embedding for now to avoid attachment complexity
+          const dataUrl = `data:image/png;base64,${diagram.imageBase64}`;
+          const imageXml = `<ac:image ac:alt="Mermaid Diagram">
+    <ri:url ri:value="${this.escapeXml(dataUrl)}" />
+</ac:image>`;
+          processedContent = processedContent.replace(match[0], imageXml);
+        } else {
+          throw new Error('Failed to render diagram');
+        }
+      } catch (error) {
+        // Fallback to code block
+        const fallbackContent = `<ac:macro ac:name="code">
+    <ac:parameter ac:name="language">mermaid</ac:parameter>
+    <ac:plain-text-body><![CDATA[${mermaidCode}]]></ac:plain-text-body>
+</ac:macro>`;
+        processedContent = processedContent.replace(match[0], fallbackContent);
+      }
+    }
+
+    return processedContent;
+  }
+
+  async processMermaidDiagramsFallbackWithPlaceholders(content: string, replacements: Map<string, string>): Promise<string> {
+    const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
+    let processedContent = content;
+
+    let match;
+    while ((match = mermaidRegex.exec(content)) !== null) {
+      const mermaidCode = match[1].trim();
+      const diagramId = `mermaid_diagram_${this.mermaidCounter++}`;
+      
+      if (this.options.diagramFormat === 'attachment' && this.options.includeAttachments) {
+        // Create placeholder attachment (no actual rendering)
+        const attachment: ConfluenceAttachment = {
+          id: diagramId,
+          title: `${diagramId}.png`,
+          mediaType: 'image/png',
+          comment: 'Mermaid diagram (rendering not available in simplified converter)'
+        };
+        
+        this.attachments.set(diagramId, attachment);
+        
+        // Replace with placeholder for post-processing
+        const attachmentXml = `<ac:image ac:alt="Mermaid Diagram" ac:title="${diagramId}.png">
+    <ri:attachment ri:filename="${diagramId}.png" />
+</ac:image>`;
+        const placeholder = `CONFLUENCE_SAFE_PLACEHOLDER_${diagramId}`;
+        replacements.set(placeholder, attachmentXml);
+        processedContent = processedContent.replace(match[0], placeholder);
+      } else if (this.options.diagramFormat === 'base64') {
+        // For base64 mode without converter, create a placeholder for a simple image
+        const imageXml = `<ac:image ac:alt="Mermaid Diagram">
+    <ri:url ri:value="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMTkiIHN0cm9rZT0iIzk5OSIgZmlsbD0iI2Y5ZjlmOSIvPgo8dGV4dCB4PSIyMCIgeT0iMjQiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2Ij5EaWFncmFtPC90ZXh0Pgo8L3N2Zz4=" />
+</ac:image>`;
+        const placeholder = `CONFLUENCE_SAFE_PLACEHOLDER_${diagramId}`;
+        replacements.set(placeholder, imageXml);
+        processedContent = processedContent.replace(match[0], placeholder);
+      } else {
+        // Replace with code block
+        const codeXml = `<ac:macro ac:name="code">
+    <ac:parameter ac:name="language">mermaid</ac:parameter>
+    <ac:plain-text-body><![CDATA[${mermaidCode}]]></ac:plain-text-body>
+</ac:macro>`;
+        const placeholder = `CONFLUENCE_SAFE_PLACEHOLDER_${diagramId}`;
+        replacements.set(placeholder, codeXml);
+        processedContent = processedContent.replace(match[0], placeholder);
+      }
+    }
+
+    return processedContent;
+  }
+
+  async processMermaidDiagramsFallbackDirectly(content: string): Promise<string> {
+    const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
+    let processedContent = content;
+
+    let match;
+    while ((match = mermaidRegex.exec(content)) !== null) {
+      const mermaidCode = match[1].trim();
+      const diagramId = `mermaid_diagram_${this.mermaidCounter++}`;
+      
+      if (this.options.diagramFormat === 'attachment' && this.options.includeAttachments) {
+        // Create placeholder attachment (no actual rendering)
+        const attachment: ConfluenceAttachment = {
+          id: diagramId,
+          title: `${diagramId}.png`,
+          mediaType: 'image/png',
+          comment: 'Mermaid diagram (rendering not available in simplified converter)'
+        };
+        
+        this.attachments.set(diagramId, attachment);
+        
+        // Replace directly with Confluence XML
+        const attachmentXml = `<ac:image ac:alt="Mermaid Diagram" ac:title="${diagramId}.png">
+    <ri:attachment ri:filename="${diagramId}.png" />
+</ac:image>`;
+        processedContent = processedContent.replace(match[0], attachmentXml);
+      } else {
+        // Replace with code block
+        const codeXml = `<ac:macro ac:name="code">
+    <ac:parameter ac:name="language">mermaid</ac:parameter>
+    <ac:plain-text-body><![CDATA[${mermaidCode}]]></ac:plain-text-body>
+</ac:macro>`;
+        processedContent = processedContent.replace(match[0], codeXml);
+      }
+    }
+
+    return processedContent;
   }
 
   async processMermaidDiagrams(content: string, converter: any): Promise<string> {
