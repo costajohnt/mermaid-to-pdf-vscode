@@ -1,6 +1,6 @@
 {
   "name": "markdown-mermaid-converter-mcp",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "MCP server for converting Markdown with Mermaid diagrams to various formats - optimized for AI integration",
   "main": "dist/index.js",
   "type": "module",

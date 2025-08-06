@@ -400,11 +400,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         
         progress.log(`Completed in ${progress.getElapsed()}ms`);
         
-        // Prepare output content
+        // Prepare output content - exclude base64 data to avoid MCP token limits
+        const attachmentSummary = result.attachments.map(att => ({
+          id: att.id,
+          title: att.title,
+          mediaType: att.mediaType,
+          size: att.size,
+          comment: att.comment,
+          dataLength: att.data ? att.data.length : 0
+        }));
+
         const outputContent = JSON.stringify({
-          document: result.document,
-          attachments: result.attachments,
-          warnings: result.warnings
+          document: {
+            ...result.document,
+            // Remove attachments from document to avoid duplication
+            attachments: undefined
+          },
+          attachments: attachmentSummary,
+          warnings: result.warnings,
+          note: "Base64 image data excluded from MCP response to avoid token limits. Use CLI for full output with attachments."
         });
 
         return {

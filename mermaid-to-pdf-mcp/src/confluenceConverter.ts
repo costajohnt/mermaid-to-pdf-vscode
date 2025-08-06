@@ -117,11 +117,11 @@ export class SimplifiedConfluenceConverter {
         this.attachments.set(diagramId, attachment);
         
         // Replace with placeholder
-        const placeholder = `__CONFLUENCE_DIAGRAM_PLACEHOLDER_${diagramId}__`;
+        const placeholder = `<!-- CONFLUENCE_DIAGRAM_PLACEHOLDER_${diagramId} -->`;
         processedContent = processedContent.replace(match[0], placeholder);
       } else {
         // Replace with code block
-        const placeholder = `__CONFLUENCE_CODE_PLACEHOLDER_${diagramId}__`;
+        const placeholder = `{{CONFLUENCE_CODE_PLACEHOLDER_${diagramId}}}`;
         this.attachments.set(`code_${diagramId}`, {
           id: `code_${diagramId}`,
           title: 'Mermaid Code Block',
@@ -142,7 +142,7 @@ export class SimplifiedConfluenceConverter {
     for (const [id, attachment] of this.attachments) {
       if (id.startsWith('image_')) {
         // Base64 embedded image placeholder
-        const placeholder = `__CONFLUENCE_IMAGE_PLACEHOLDER_${id.replace('image_', '')}__`;
+        const placeholder = `<!-- CONFLUENCE_IMAGE_PLACEHOLDER_${id.replace('image_', '')} -->`;
         const dataUrl = `data:image/png;base64,${attachment.data}`;
         const imageXml = `<ac:image ac:alt="Mermaid Diagram">
       <ri:url ri:value="${this.escapeXml(dataUrl)}" />
@@ -150,7 +150,7 @@ export class SimplifiedConfluenceConverter {
         processedContent = processedContent.replace(placeholder, imageXml);
       } else if (id.startsWith('code_')) {
         // Code block placeholder
-        const placeholder = `__CONFLUENCE_CODE_PLACEHOLDER_${id.replace('code_', '')}__`;
+        const placeholder = `{{CONFLUENCE_CODE_PLACEHOLDER_${id.replace('code_', '')}}}`;
         const codeXml = `<ac:macro ac:name="code">
       <ac:parameter ac:name="language">mermaid</ac:parameter>
       <ac:plain-text-body><![CDATA[${attachment.comment}]]></ac:plain-text-body>
@@ -158,7 +158,7 @@ export class SimplifiedConfluenceConverter {
         processedContent = processedContent.replace(placeholder, codeXml);
       } else {
         // Attachment reference placeholder
-        const placeholder = `__CONFLUENCE_DIAGRAM_PLACEHOLDER_${id}__`;
+        const placeholder = `<!-- CONFLUENCE_DIAGRAM_PLACEHOLDER_${id} -->`;
         const attachmentXml = `<ac:image ac:title="${id}.png">
         <ri:attachment ri:filename="${id}.png" />
       </ac:image>`;
@@ -208,7 +208,7 @@ export class SimplifiedConfluenceConverter {
             this.attachments.set(diagramId, attachment);
             
             // Replace with placeholder to avoid double-escaping
-            const placeholder = `__CONFLUENCE_DIAGRAM_PLACEHOLDER_${diagramId}__`;
+            const placeholder = `<!-- CONFLUENCE_DIAGRAM_PLACEHOLDER_${diagramId} -->`;
             processedContent = processedContent.replace(match[0], placeholder);
           } else {
             throw new Error('Failed to render diagram');
@@ -219,7 +219,7 @@ export class SimplifiedConfluenceConverter {
           
           if (diagrams && diagrams.length > 0) {
             const diagram = diagrams[0];
-            const placeholder = `__CONFLUENCE_IMAGE_PLACEHOLDER_${diagramId}__`;
+            const placeholder = `<!-- CONFLUENCE_IMAGE_PLACEHOLDER_${diagramId} -->`;
             
             // Store the image info for later replacement
             this.attachments.set(`image_${diagramId}`, {
