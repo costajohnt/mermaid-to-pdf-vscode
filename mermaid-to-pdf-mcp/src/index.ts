@@ -10,6 +10,8 @@ import {
 import { MermaidConverter } from './converter.js';
 import { ConversionOptions, ConversionResult } from './types.js';
 import { createHash } from 'crypto';
+// Import simplified Confluence converter
+import { SimplifiedConfluenceConverter } from './confluenceConverter.js';
 
 // Silent logger - only log errors to avoid MCP noise
 const logger = {
@@ -162,6 +164,29 @@ const TOOLS = {
                 left: { type: 'string' }
               }
             }
+          }
+        }
+      },
+      required: ['markdown']
+    }
+  },
+
+  convertMarkdownToConfluence: {
+    name: 'convert_markdown_to_confluence',
+    description: 'Convert Markdown with Mermaid to Confluence Storage Format',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        markdown: { type: 'string' },
+        options: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            spaceKey: { type: 'string' },
+            outputPath: { type: 'string' },
+            outputFormat: { type: 'string', enum: ['json', 'xml', 'package'] },
+            includeAttachments: { type: 'boolean' },
+            diagramFormat: { type: 'string', enum: ['base64', 'attachment'] }
           }
         }
       },
@@ -339,6 +364,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: JSON.stringify(response)
+            }
+          ]
+        };
+      }
+
+      case 'convert_markdown_to_confluence': {
+        const { markdown, options = {} } = args as any;
+        
+        if (!markdown || typeof markdown !== 'string') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'markdown parameter is required and must be a string'
+          );
+        }
+
+        // Create simplified Confluence converter
+        const confluenceConverter = new SimplifiedConfluenceConverter({
+          spaceKey: options.spaceKey,
+          title: options.title,
+          outputFormat: options.outputFormat || 'json',
+          includeAttachments: options.includeAttachments !== false,
+          diagramFormat: options.diagramFormat || 'attachment'
+        });
+
+        const progress = new OperationProgress('Confluence conversion');
+        progress.log('Starting conversion');
+        
+        // Convert using the simplified Confluence converter with access to the main converter for diagram rendering
+        const result = await withTimeout(
+          confluenceConverter.convertMarkdown(markdown, converter),
+          OPERATION_TIMEOUTS.conversion,
+          'Confluence conversion'
+        );
+        
+        progress.log(`Completed in ${progress.getElapsed()}ms`);
+        
+        // Prepare output content
+        const outputContent = JSON.stringify({
+          document: result.document,
+          attachments: result.attachments,
+          warnings: result.warnings
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: outputContent
             }
           ]
         };

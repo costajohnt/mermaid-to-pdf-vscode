@@ -1,14 +1,13 @@
 #!/usr/bin/env node
-
-import { readFileSync } from 'fs';
-import { resolve, basename } from 'path';
-import { FinalMermaidToPdfConverter } from './finalConverter.js';
-import { ConfluenceConverter } from './confluenceConverter.js';
-import { BrowserPool } from './browserPool.js';
-
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.main = main;
+const path_1 = require("path");
+const finalConverter_js_1 = require("./finalConverter.js");
+const confluenceConverter_js_1 = require("./confluenceConverter.js");
+const browserPool_js_1 = require("./browserPool.js");
 async function main() {
     const args = process.argv.slice(2);
-    
     if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
         console.log(`
 Markdown Mermaid Converter CLI Tool
@@ -39,13 +38,11 @@ Examples:
         `);
         process.exit(0);
     }
-
     const inputFile = args[0];
     if (!inputFile) {
         console.error('Error: Input file is required');
         process.exit(1);
     }
-
     // Parse options
     let format = 'pdf';
     let outputFile = '';
@@ -55,7 +52,6 @@ Examples:
     let confluenceFormat = 'json';
     let spaceKey = '';
     let title = '';
-
     for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         switch (arg) {
@@ -90,47 +86,41 @@ Examples:
                 break;
         }
     }
-
     // Set default output file if not specified
     if (!outputFile) {
         if (format === 'confluence') {
-            const extension = confluenceFormat === 'xml' ? 'xml' : 
-                            confluenceFormat === 'package' ? 'zip' : 'json';
+            const extension = confluenceFormat === 'xml' ? 'xml' :
+                confluenceFormat === 'package' ? 'zip' : 'json';
             outputFile = inputFile.replace(/\.md$/, `_confluence.${extension}`);
-        } else {
+        }
+        else {
             outputFile = inputFile.replace(/\.md$/, '.pdf');
         }
     }
-
     // Validate format
     if (!['pdf', 'confluence'].includes(format)) {
         console.error(`Error: Invalid format "${format}". Must be "pdf" or "confluence".`);
         process.exit(1);
     }
-
     // Validate confluence format
     if (format === 'confluence' && !['json', 'xml', 'package'].includes(confluenceFormat)) {
         console.error(`Error: Invalid confluence format "${confluenceFormat}". Must be "json", "xml", or "package".`);
         process.exit(1);
     }
-
     try {
         if (format === 'confluence') {
             console.log(`Converting ${inputFile} to Confluence format...`);
-            
-            const confluenceConverter = new ConfluenceConverter({
+            const confluenceConverter = new confluenceConverter_js_1.ConfluenceConverter({
                 spaceKey: spaceKey || undefined,
                 title: title || undefined,
-                outputFormat: confluenceFormat as 'json' | 'xml' | 'package',
+                outputFormat: confluenceFormat,
                 includeAttachments: true,
                 diagramFormat: 'attachment',
                 validateOutput: true
             });
-
-            const result = await confluenceConverter.convert(resolve(inputFile), (message: string, increment: number) => {
+            const result = await confluenceConverter.convert((0, path_1.resolve)(inputFile), (message, increment) => {
                 console.log(`[${increment}%] ${message}`);
             });
-
             console.log(`✅ Confluence document created successfully: ${result.outputPath}`);
             if (result.attachments.length > 0) {
                 console.log(`📎 Generated ${result.attachments.length} attachment(s)`);
@@ -139,46 +129,37 @@ Examples:
                 console.log(`⚠️  Warnings:`);
                 result.warnings.forEach(warning => console.log(`   ${warning}`));
             }
-            
-        } else {
+        }
+        else {
             console.log(`Converting ${inputFile} to PDF...`);
-            
-            const pdfConverter = new FinalMermaidToPdfConverter({
+            const pdfConverter = new finalConverter_js_1.FinalMermaidToPdfConverter({
                 engine: 'puppeteer',
-                quality: quality as 'draft' | 'standard' | 'high',
-                theme: theme as 'light' | 'dark',
-                pageSize: pageSize as 'A4' | 'Letter' | 'Legal'
+                quality: quality,
+                theme: theme,
+                pageSize: pageSize
             });
-
-            const result = await pdfConverter.convert(resolve(inputFile), (message: string, increment: number) => {
+            const result = await pdfConverter.convert((0, path_1.resolve)(inputFile), (message, increment) => {
                 console.log(`[${increment}%] ${message}`);
             });
-
             console.log(`✅ PDF created successfully: ${result}`);
         }
-        
         // Clean up browser pool to prevent hanging processes
-        const browserPool = BrowserPool.getInstance();
+        const browserPool = browserPool_js_1.BrowserPool.getInstance();
         await browserPool.destroy();
-        
         // Explicitly exit with success to prevent hanging
         process.exit(0);
-        
-    } catch (error) {
+    }
+    catch (error) {
         console.error('❌ Conversion failed:', error);
-        
         // Clean up browser pool even on error
         try {
-            const browserPool = BrowserPool.getInstance();
+            const browserPool = browserPool_js_1.BrowserPool.getInstance();
             await browserPool.destroy();
-        } catch (cleanupError) {
+        }
+        catch (cleanupError) {
             // Ignore cleanup errors
         }
-        
         process.exit(1);
     }
 }
-
 main().catch(console.error);
-
-export { main };

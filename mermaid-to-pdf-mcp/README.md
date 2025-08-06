@@ -16,7 +16,7 @@
 ### Option 1: Install via NPM (Recommended)
 
 ```bash
-npm install -g @mermaid-to-pdf/mcp-server
+npm install -g markdown-mermaid-converter-mcp
 ```
 
 ### Option 2: Install from Source
@@ -33,14 +33,14 @@ npm link
 
 ### For Claude Code
 
-Add to your Claude Code settings (`.claude/settings.json`):
+Add to your Claude Code configuration (`~/.config/claude-desktop/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
-    "mermaid-to-pdf": {
-      "command": "mermaid-to-pdf-mcp",
-      "description": "Convert Markdown with Mermaid diagrams to PDF"
+    "markdown-mermaid-converter": {
+      "command": "npx",
+      "args": ["markdown-mermaid-converter-mcp@latest"]
     }
   }
 }
@@ -56,9 +56,9 @@ Add to your development tool's MCP configuration:
 {
   "mcp.servers": [
     {
-      "name": "mermaid-to-pdf",
-      "command": "mermaid-to-pdf-mcp",
-      "description": "Markdown + Mermaid to PDF converter"
+      "name": "markdown-mermaid-converter",
+      "command": "markdown-mermaid-converter-mcp",
+      "description": "Markdown + Mermaid to PDF and Confluence converter"
     }
   ]
 }
@@ -73,7 +73,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 const transport = new StdioClientTransport({
-  command: 'mermaid-to-pdf-mcp'
+  command: 'markdown-mermaid-converter-mcp'
 });
 
 const client = new Client(
@@ -134,7 +134,26 @@ Extract diagrams as individual images.
 }
 ```
 
-### 4. `validate_mermaid_syntax`
+### 4. `convert_markdown_to_confluence`
+Convert Markdown to Confluence Storage Format with embedded diagrams.
+
+```json
+{
+  "name": "convert_markdown_to_confluence",
+  "arguments": {
+    "markdown": "# My Document\n\n```mermaid\nflowchart TD\n    A[Start] --> B[End]\n```",
+    "options": {
+      "title": "My Document",
+      "spaceKey": "SPACE",
+      "outputFormat": "json",
+      "includeAttachments": true,
+      "diagramFormat": "attachment"
+    }
+  }
+}
+```
+
+### 5. `validate_mermaid_syntax`
 Validate Mermaid diagram syntax.
 
 ```json
@@ -146,7 +165,7 @@ Validate Mermaid diagram syntax.
 }
 ```
 
-### 5. `get_custom_instructions`
+### 6. `get_custom_instructions`
 Get LLM guidance for optimal usage.
 
 ```json
@@ -275,11 +294,11 @@ sequenceDiagram
 
 ### Common Issues
 
-**"Command not found: mermaid-to-pdf-mcp"**
+**"Command not found: markdown-mermaid-converter-mcp"**
 ```bash
 # Reinstall globally
-npm uninstall -g @mermaid-to-pdf/mcp-server
-npm install -g @mermaid-to-pdf/mcp-server
+npm uninstall -g markdown-mermaid-converter-mcp
+npm install -g markdown-mermaid-converter-mcp
 ```
 
 **"Failed to render Mermaid diagram"**
@@ -296,7 +315,7 @@ npm install -g @mermaid-to-pdf/mcp-server
 
 Enable detailed logging:
 ```bash
-DEBUG=mcp:* mermaid-to-pdf-mcp
+DEBUG=mcp:* markdown-mermaid-converter-mcp
 ```
 
 ## Development

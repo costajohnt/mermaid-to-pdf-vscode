@@ -1,0 +1,92 @@
+<h1>Comprehensive Confluence Conversion Test</h1><p>This document tests all aspects of the Markdown to Confluence conversion functionality.</p><h2>Text Formatting</h2><p>Here we test various <strong>bold</strong>, <em>italic</em>, and <em><strong>bold italic</strong></em> text formatting.</p><p>We also test <code>inline code</code> and <s>strikethrough</s> text.</p><h3>Special Characters and Escaping</h3><p>Text with special XML characters: <code>&amp;lt;script&amp;gt;</code>, <code>&amp;amp;amp;</code>, <code>&amp;quot;quotes&amp;quot;</code>, and <code>&amp;#39;apostrophes&amp;#39;</code>.</p><h2>Links and References</h2><ul><li><a href="https://github.com/costajohnt/markdown-mermaid-converter">External link</a></li><li><a href="https://docs.atlassian.com/atlassian-confluence/" title="Confluence Documentation">Link with title</a></li><li>Relative link: <ac:link>
+      <ri:page ri:content-title="README.md" />
+      <ac:plain-text-link-body><![CDATA[README]]></ac:plain-text-link-body>
+    </ac:link></li></ul><h2>Code Blocks</h2><h3>JavaScript</h3><ac:macro ac:name="code">
+      <ac:parameter ac:name="language" ac:value="javascript" />
+      <ac:plain-text-body><![CDATA[function fibonacci(n) {
+  if (n <= 1) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+console.log(fibonacci(10)); // 55]]></ac:plain-text-body>
+    </ac:macro><h3>Python</h3><ac:macro ac:name="code">
+      <ac:parameter ac:name="language" ac:value="python" />
+      <ac:plain-text-body><![CDATA[def quick_sort(arr):
+    if len(arr) <= 1:
+        return arr
+    pivot = arr[len(arr) // 2]
+    left = [x for x in arr if x < pivot]
+    middle = [x for x in arr if x == pivot]
+    right = [x for x in arr if x > pivot]
+    return quick_sort(left) + middle + quick_sort(right)
+
+print(quick_sort([3,6,8,10,1,2,1]))]]></ac:plain-text-body>
+    </ac:macro><h3>No Language Specified</h3><ac:macro ac:name="code">
+      
+      <ac:plain-text-body><![CDATA[This is a code block without language specification.
+It should still be properly formatted.]]></ac:plain-text-body>
+    </ac:macro><h2>Lists</h2><h3>Unordered Lists</h3><ul><li>First level item</li><li>Another first level item<ul><li>Second level item</li><li>Another second level item<ul><li>Third level item</li><li>Another third level item</li></ul></li></ul></li><li>Back to first level</li></ul><h3>Ordered Lists</h3><ol><li>First numbered item</li><li>Second numbered item<ol><li>Nested numbered item</li><li>Another nested numbered item<ol><li>Deep nested item</li><li>Another deep nested item</li></ol></li></ol></li><li>Third numbered item</li></ol><h3>Mixed Lists</h3><ol><li>Ordered item<ul><li>Unordered sub-item</li><li>Another unordered sub-item</li></ul></li><li>Another ordered item<ol><li>Ordered sub-item</li><li>Another ordered sub-item</li></ol></li></ol><h2>Tables</h2><h3>Simple Table</h3><table>
+<thead>
+<tr>
+<th>Column 1</th>
+<th>Column 2</th>
+<th>Column 3</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Row 1 A</td>
+<td>Row 1 B</td>
+<td>Row 1 C</td>
+</tr>
+<tr>
+<td>Row 2 A</td>
+<td>Row 2 B</td>
+<td>Row 2 C</td>
+</tr>
+</tbody></table>
+<h3>Complex Table with Formatting</h3><table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Bold text</strong></td>
+<td>✅ Complete</td>
+<td>Works correctly</td>
+</tr>
+<tr>
+<td><em>Italic text</em></td>
+<td>✅ Complete</td>
+<td>Also works</td>
+</tr>
+<tr>
+<td><code>Code spans</code></td>
+<td>✅ Complete</td>
+<td><code>inline code</code></td>
+</tr>
+<tr>
+<td>Links</td>
+<td>✅ Complete</td>
+<td><a href="https://github.com">GitHub</a></td>
+</tr>
+</tbody></table>
+<h2>Blockquotes</h2><ac:macro ac:name="quote">
+      <ac:rich-text-body><p>This is a simple blockquote.</p></ac:rich-text-body>
+    </ac:macro><ac:macro ac:name="quote">
+      <ac:rich-text-body><p>This is a blockquote with <strong>bold text</strong> and <em>italic text</em>.</p><p>It can span multiple paragraphs.</p><ac:macro ac:name="quote">
+      <ac:rich-text-body><p>And even contain nested blockquotes.</p></ac:rich-text-body>
+    </ac:macro></ac:rich-text-body>
+    </ac:macro><h2>Mermaid Diagrams</h2><h3>Flowchart</h3><p><ac:image ac:title="mermaid_diagram_0.png">
+        <ri:attachment ri:filename="mermaid_diagram_0.png" />
+      </ac:image></p><h3>Sequence Diagram</h3><p><ac:image ac:title="mermaid_diagram_1.png">
+        <ri:attachment ri:filename="mermaid_diagram_1.png" />
+      </ac:image></p><h3>Class Diagram</h3><p><ac:image ac:title="mermaid_diagram_2.png">
+        <ri:attachment ri:filename="mermaid_diagram_2.png" />
+      </ac:image></p><h2>Images</h2><h3>External Image</h3><p><ac:image ac:alt="Mermaid Logo">
+      <ri:url ri:value="https://mermaid-js.github.io/mermaid/img/header.png" />
+    </ac:image></p><h3>Image with Title</h3><p><ac:image ac:title="Placeholder Image" ac:alt="Test Image">
+      <ri:url ri:value="https://via.placeholder.com/150x100.png" />
+    </ac:image></p><h2>Horizontal Rules</h2><p>Content above the rule.</p><hr /><p>Content below the rule.</p><hr /><h2>Edge Cases</h2><h3>Empty Elements</h3><p>- </p><ul><li>Empty list item above</li><li>Normal list item</li></ul><h3>Special Markdown</h3><p><s>This text should be struck through</s></p><h3>Nested Formatting</h3><p><strong>Bold with <em>italic inside</em> and <code>code</code> too</strong></p><h3>Long Content</h3><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p><h2>Final Notes</h2><p>This document tests:</p><ul><li>✅ All text formatting options</li><li>✅ Multiple mermaid diagram types</li><li>✅ Complex nested lists</li><li>✅ Tables with formatting</li><li>✅ Code blocks in various languages</li><li>✅ Blockquotes with nesting</li><li>✅ Links and images</li><li>✅ Special characters and edge cases</li></ul><p>If all of these render correctly in Confluence Storage Format, the converter is working properly!</p>

@@ -1,0 +1,29 @@
+<h1>Test Document for Confluence</h1><p>This is a test document to verify the Confluence conversion functionality.</p><h2>Features</h2><ul><li><strong>Bold text</strong> and <em>italic text</em></li><li><code>Inline code</code> formatting</li><li><a href="https://example.com">External link</a></li></ul><h3>Code Block</h3><ac:macro ac:name="code">
+      <ac:parameter ac:name="language" ac:value="javascript" />
+      <ac:plain-text-body><![CDATA[function hello() {
+  console.log("Hello, Confluence!");
+}]]></ac:plain-text-body>
+    </ac:macro><h3>Mermaid Diagram</h3><p><ac:image ac:title="mermaid_diagram_0.png">
+        <ri:attachment ri:filename="mermaid_diagram_0.png" />
+      </ac:image></p><h3>Table</h3><table>
+<thead>
+<tr>
+<th>Column 1</th>
+<th>Column 2</th>
+<th>Column 3</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Row 1</td>
+<td>Data A</td>
+<td>Data B</td>
+</tr>
+<tr>
+<td>Row 2</td>
+<td>Data C</td>
+<td>Data D</td>
+</tr>
+</tbody></table>
+<h3>List</h3><ol><li>First item</li><li>Second item<ul><li>Sub item A</li><li>Sub item B</li></ul></li><li>Third item</li></ol><ac:macro ac:name="quote">
+      <ac:rich-text-body><p>This is a blockquote with some important information.</p></ac:rich-text-body>
+    </ac:macro><hr /><p>That concludes our test document!</p>
