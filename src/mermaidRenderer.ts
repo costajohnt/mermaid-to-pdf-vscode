@@ -1,255 +1,210 @@
-import * as puppeteer from 'puppeteer';
-import * as fs from 'fs';
-import * as path from 'path';
-import { BrowserPool } from './browserPool.js';
+import puppeteer, { type Browser } from 'puppeteer';
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import type { RenderedDiagram } from './types.js';
 
-export async function renderMermaid(mermaidCode: string, outputPath: string): Promise<void> {
-    // Validate inputs
-    await validateMermaidInput(mermaidCode, outputPath);
-    
-    const browserPool = BrowserPool.getInstance();
-    const browser = await browserPool.getBrowser();
-    
-    const page = await browser.newPage();
-    
-    // Set viewport for consistent rendering - smaller for more compact diagrams
-    await page.setViewport({ width: 800, height: 600, deviceScaleFactor: 2 });
-    
-    // Increase timeout for complex diagrams
-    page.setDefaultTimeout(60000);
-    
-    const html = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            background: white;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-        }
-        #mermaid-container {
-            display: inline-block;
-            min-width: 100px;
-            min-height: 100px;
-        }
-        .mermaid {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-        }
-        /* Ensure SVG is visible */
-        .mermaid svg {
-            max-width: 100%;
-            height: auto;
-        }
-    </style>
-</head>
-<body>
-    <div id="mermaid-container">
-        <div class="mermaid" id="diagram">
-${mermaidCode}
-        </div>
-    </div>
-    
-    <script>
-        // Initialize mermaid with better error handling
-        mermaid.initialize({ 
-            startOnLoad: false,
-            theme: 'default',
-            themeVariables: {
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
-                fontSize: '14px'
-            },
-            logLevel: 'error',
-            securityLevel: 'loose',
-            flowchart: {
-                htmlLabels: true,
-                useMaxWidth: true,
-                nodeSpacing: 30,
-                rankSpacing: 30,
-                padding: 10
-            },
-            sequence: {
-                diagramMarginX: 25,
-                diagramMarginY: 10,
-                boxTextMargin: 5,
-                noteMargin: 10,
-                messageMargin: 25
-            }
-        });
-        
-        // Manual initialization with error handling
-        window.addEventListener('DOMContentLoaded', async function() {
-            try {
-                const element = document.getElementById('diagram');
-                if (element) {
-                    await mermaid.run({
-                        nodes: [element]
-                    });
-                    
-                    // Mark as complete for Puppeteer to detect
-                    window.mermaidRenderComplete = true;
-                    
-                    // Ensure proper sizing
-                    const svg = element.querySelector('svg');
-                    if (svg) {
-                        const bbox = svg.getBBox();
-                        svg.setAttribute('width', Math.max(bbox.width + 40, 100));
-                        svg.setAttribute('height', Math.max(bbox.height + 40, 100));
-                        svg.style.maxWidth = 'none';
-                        svg.style.height = 'auto';
-                    }
-                }
-            } catch (error) {
-                console.error('Mermaid rendering failed:', error);
-                window.mermaidRenderError = error.message;
-                
-                // Create fallback content
-                const element = document.getElementById('diagram');
-                if (element) {
-                    element.innerHTML = '<div style="border: 2px dashed #ccc; padding: 20px; text-align: center; color: #666;">Mermaid diagram failed to render:<br>' + error.message + '</div>';
-                }
-                window.mermaidRenderComplete = true;
-            }
-        });
-    </script>
-</body>
-</html>`;
+// Module-level browser singleton (lazy-init)
+let browserInstance: Browser | null = null;
 
-    try {
-        await page.setContent(html, { 
-            waitUntil: ['networkidle0', 'domcontentloaded']
-        });
-        
-        // Wait for mermaid library to load
-        await page.waitForFunction(
-            () => typeof (window as any).mermaid !== 'undefined' && typeof (window as any).mermaid.run === 'function',
-            { timeout: 30000 }
-        );
-        
-        // Wait for render to complete (either success or error)
-        await page.waitForFunction(
-            () => (window as any).mermaidRenderComplete === true,
-            { timeout: 45000 }
-        );
-        
-        // Check if there was an error
-        const renderError = await page.evaluate(() => (window as any).mermaidRenderError);
-        if (renderError) {
-            console.warn(`Mermaid render warning: ${renderError}`);
-        }
-        
-        // Wait for SVG to be present and have dimensions, or for error fallback
-        await page.waitForFunction(
-            () => {
-                const container = document.getElementById('mermaid-container');
-                if (!container) {
-                    return false;
-                }
-                
-                // Check for error fallback content
-                const errorDiv = container.querySelector('div[style*="border: 2px dashed"]');
-                if (errorDiv) {
-                    return true; // Error fallback is ready
-                }
-                
-                const svg = container.querySelector('svg');
-                if (!svg) {
-                    return false;
-                }
-                
-                const bbox = svg.getBoundingClientRect();
-                return bbox.width > 0 && bbox.height > 0;
-            },
-            { timeout: 30000 }
-        );
-        
-        // Additional wait to ensure fonts are loaded
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        const element = await page.$('#mermaid-container');
-        if (element) {
-            await element.screenshot({ 
-                path: outputPath,
-                type: 'png',
-                omitBackground: false
-            });
-        } else {
-            throw new Error('Failed to find Mermaid diagram container');
-        }
-        
-    } catch (error) {
-        console.error('Mermaid rendering error:', error);
-        throw new Error(`Failed to render Mermaid diagram: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-        // Close the page and release browser back to pool
+const BROWSER_ARGS = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+];
+
+const RENDER_TIMEOUT = 30_000;
+const PADDING = 10;
+
+/**
+ * Get or create the singleton browser instance.
+ */
+async function getBrowser(): Promise<Browser> {
+    if (browserInstance && browserInstance.connected) {
+        return browserInstance;
+    }
+    browserInstance = await puppeteer.launch({
+        headless: true,
+        args: BROWSER_ARGS,
+    });
+    return browserInstance;
+}
+
+/**
+ * Close the singleton browser instance. Call this during cleanup.
+ */
+export async function closeBrowser(): Promise<void> {
+    if (browserInstance) {
         try {
-            await page.close();
-        } catch (error) {
-            console.warn('Failed to close page:', error);
+            await browserInstance.close();
+        } catch {
+            // Ignore close errors
         }
-        
-        const browserPool = BrowserPool.getInstance();
-        await browserPool.releaseBrowser(browser);
+        browserInstance = null;
     }
 }
 
-async function validateMermaidInput(mermaidCode: string, outputPath: string): Promise<void> {
-    // Validate mermaid code input
-    if (!mermaidCode || typeof mermaidCode !== 'string') {
-        throw new Error('Invalid mermaid code: Code must be a non-empty string');
+/**
+ * Load the vendored mermaid.min.js source code.
+ */
+function loadMermaidScript(): string {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const mermaidPath = resolve(__dirname, 'vendor', 'mermaid.min.js');
+    return readFileSync(mermaidPath, 'utf-8');
+}
+
+/**
+ * Render a Mermaid diagram to SVG with measured dimensions.
+ *
+ * @param code - The Mermaid diagram source code
+ * @param theme - Optional mermaid theme (default: 'default')
+ * @returns A RenderedDiagram with the SVG string and pixel dimensions
+ */
+/**
+ * @deprecated Use renderMermaidToSvg instead. This stub exists for backward
+ * compatibility while other modules are migrated (Tasks 4-7).
+ */
+export async function renderMermaid(mermaidCode: string, _outputPath: string): Promise<void> {
+    await renderMermaidToSvg(mermaidCode);
+}
+
+/**
+ * Render a Mermaid diagram to SVG with measured dimensions.
+ *
+ * @param code - The Mermaid diagram source code
+ * @param theme - Optional mermaid theme (default: 'default')
+ * @returns A RenderedDiagram with the SVG string and pixel dimensions
+ */
+export async function renderMermaidToSvg(
+    code: string,
+    theme: string = 'default',
+): Promise<RenderedDiagram> {
+    // Validate input
+    if (!code || typeof code !== 'string' || code.trim().length === 0) {
+        throw new Error('Mermaid code must be a non-empty string');
     }
 
-    if (mermaidCode.length > 50000) { // 50KB limit for diagram code
-        throw new Error('Mermaid code too large: Maximum size is 50KB');
-    }
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+    page.setDefaultTimeout(RENDER_TIMEOUT);
 
-    // Basic validation to prevent potentially dangerous content
-    const dangerousPatterns = [
-        /<script/i,
-        /javascript:/i,
-        /data:text\/html/i,
-        /vbscript:/i,
-        /<iframe/i,
-        /<object/i,
-        /<embed/i
-    ];
+    try {
+        // Load a minimal blank page
+        await page.setContent(
+            '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body></body></html>',
+            { waitUntil: 'domcontentloaded' },
+        );
 
-    for (const pattern of dangerousPatterns) {
-        if (pattern.test(mermaidCode)) {
-            throw new Error('Security violation: Potentially dangerous content detected in mermaid code');
+        // Inject vendored mermaid.js
+        const mermaidScript = loadMermaidScript();
+        await page.addScriptTag({ content: mermaidScript });
+
+        // Wait for mermaid global to be available
+        await page.waitForFunction(
+            () =>
+                typeof (window as any).mermaid !== 'undefined' &&
+                typeof (window as any).mermaid.initialize === 'function',
+            { timeout: RENDER_TIMEOUT },
+        );
+
+        // Initialize mermaid and render the diagram
+        const result = await page.evaluate(
+            async (mermaidCode: string, mermaidTheme: string, padding: number) => {
+                const mermaid = (window as any).mermaid;
+
+                // Initialize with useMaxWidth: false on ALL diagram types
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: mermaidTheme,
+                    securityLevel: 'loose',
+                    logLevel: 'error',
+                    flowchart: { useMaxWidth: false },
+                    sequence: { useMaxWidth: false },
+                    gantt: { useMaxWidth: false },
+                    journey: { useMaxWidth: false },
+                    timeline: { useMaxWidth: false },
+                    class: { useMaxWidth: false },
+                    state: { useMaxWidth: false },
+                    er: { useMaxWidth: false },
+                    pie: { useMaxWidth: false },
+                    quadrantChart: { useMaxWidth: false },
+                    requirement: { useMaxWidth: false },
+                    mindmap: { useMaxWidth: false },
+                    gitGraph: { useMaxWidth: false },
+                    c4: { useMaxWidth: false },
+                    sankey: { useMaxWidth: false },
+                    block: { useMaxWidth: false },
+                });
+
+                // Create a container div and a diagram div
+                const container = document.createElement('div');
+                container.id = 'mermaid-container';
+                document.body.appendChild(container);
+
+                const diagramDiv = document.createElement('div');
+                diagramDiv.className = 'mermaid';
+                // Use textContent to avoid HTML escaping issues
+                diagramDiv.textContent = mermaidCode;
+                container.appendChild(diagramDiv);
+
+                // Run mermaid on the element
+                try {
+                    await mermaid.run({ nodes: [diagramDiv] });
+                } catch (err: any) {
+                    throw new Error(
+                        `Failed to render Mermaid diagram: ${err?.message || String(err)}`,
+                    );
+                }
+
+                // Extract the rendered SVG
+                const svg = diagramDiv.querySelector('svg');
+                if (!svg) {
+                    throw new Error('Failed to render Mermaid diagram: no SVG element produced');
+                }
+
+                // Measure via getBBox
+                const bbox = svg.getBBox();
+                const width = Math.ceil(bbox.width + bbox.x + padding * 2);
+                const height = Math.ceil(bbox.height + bbox.y + padding * 2);
+
+                // Set explicit viewBox, width, and height on the SVG
+                const viewBoxX = bbox.x - padding;
+                const viewBoxY = bbox.y - padding;
+                const viewBoxW = bbox.width + padding * 2;
+                const viewBoxH = bbox.height + padding * 2;
+                svg.setAttribute(
+                    'viewBox',
+                    `${viewBoxX} ${viewBoxY} ${viewBoxW} ${viewBoxH}`,
+                );
+                svg.setAttribute('width', String(width));
+                svg.setAttribute('height', String(height));
+
+                // Remove any max-width style that mermaid might set
+                svg.style.maxWidth = '';
+
+                const svgString = svg.outerHTML;
+                return { svgString, width, height };
+            },
+            code,
+            theme,
+            PADDING,
+        );
+
+        return result as RenderedDiagram;
+    } catch (error) {
+        // Re-throw with a consistent message prefix if not already formatted
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.startsWith('Failed to render') || msg.includes('non-empty string')) {
+            throw error;
         }
-    }
-
-    // Validate output path
-    if (!outputPath || typeof outputPath !== 'string') {
-        throw new Error('Invalid output path: Path must be a non-empty string');
-    }
-
-    // Ensure output path is absolute and safe
-    const normalizedPath = path.normalize(outputPath);
-    if (normalizedPath.includes('..')) {
-        throw new Error('Invalid output path: Path traversal detected');
-    }
-
-    if (!normalizedPath.toLowerCase().endsWith('.png')) {
-        throw new Error('Invalid output format: Only PNG output is supported');
-    }
-
-    // Ensure output directory exists and is writable
-    const outputDir = path.dirname(outputPath);
-    try {
-        await fs.promises.access(outputDir);
-    } catch (error) {
-        throw new Error(`Output directory does not exist: ${outputDir}`);
-    }
-
-    try {
-        await fs.promises.access(outputDir, fs.constants.W_OK);
-    } catch (error) {
-        throw new Error(`Cannot write to output directory: ${outputDir}. Check permissions.`);
+        throw new Error(`Failed to render Mermaid diagram: ${msg}`);
+    } finally {
+        try {
+            await page.close();
+        } catch {
+            // Ignore page close errors
+        }
     }
 }
