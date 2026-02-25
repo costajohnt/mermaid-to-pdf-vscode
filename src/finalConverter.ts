@@ -22,6 +22,7 @@ export interface ConversionOptions {
 export class FinalMermaidToPdfConverter {
     private mermaidCounter = 0;
     private options: ConversionOptions;
+    private diagramCache = new DiagramCache();
 
     constructor(options: Partial<ConversionOptions> = {}) {
         // Validate and sanitize options
@@ -70,10 +71,7 @@ export class FinalMermaidToPdfConverter {
         
         progressCallback?.('✅ Complete!', 100);
         
-        // Log cache statistics
-        const cache = DiagramCache.getInstance();
-        const stats = cache.getStats();
-        console.log(`📊 Cache Stats: ${stats.totalEntries} entries, ${stats.hitRate}% hit rate`);
+        // Cache is managed per-instance; no stats to log
         
         return outputPath;
     }
@@ -203,7 +201,7 @@ export class FinalMermaidToPdfConverter {
         let match;
         let processedContent = content;
         const matches = [...content.matchAll(mermaidRegex)];
-        const cache = DiagramCache.getInstance();
+        const cache = this.diagramCache;
         
         for (let i = 0; i < matches.length; i++) {
             match = matches[i];
@@ -214,15 +212,23 @@ export class FinalMermaidToPdfConverter {
             progressCallback?.(`🎨 Processing diagram ${i + 1}/${matches.length}...`, diagramProgress);
             
             try {
-                // Use cache to get or render the diagram
-                const base64Image = await cache.getOrRender(mermaidCode, imagePath);
-                const dataUrl = `data:image/png;base64,${base64Image}`;
-                
+                // Check cache first, fall back to rendering
+                let cached = cache.get(mermaidCode);
+                if (!cached) {
+                    await renderMermaid(mermaidCode, imagePath);
+                    const { promises: fsPromises } = await import('fs');
+                    const imageBuffer = await fsPromises.readFile(imagePath);
+                    const base64Data = imageBuffer.toString('base64');
+                    cached = { svgString: base64Data, width: 0, height: 0 };
+                    cache.set(mermaidCode, cached);
+                }
+                const dataUrl = `data:image/png;base64,${cached.svgString}`;
+
                 // Create better image markdown with proper sizing
                 const imageMarkdown = `<div class="mermaid-diagram"><img src="${dataUrl}" alt="Mermaid Diagram" style="max-width: 90%; max-height: 400px; height: auto; width: auto; display: block; margin: 5px auto; object-fit: contain;" /></div>`;
-                
+
                 processedContent = processedContent.replace(match[0], imageMarkdown);
-                console.log(`✅ Processed diagram ${i + 1}: ${(base64Image.length * 0.75 / 1024).toFixed(2)} KB`);
+                console.log(`✅ Processed diagram ${i + 1}`);
             } catch (error) {
                 console.error(`❌ Failed to render diagram ${i + 1}:`, error);
                 
