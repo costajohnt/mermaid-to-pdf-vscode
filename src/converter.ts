@@ -1,7 +1,7 @@
 // src/converter.ts
 import { promises as fs } from 'fs';
 import { marked } from 'marked';
-import puppeteer from 'puppeteer';
+import puppeteer, { type Browser } from 'puppeteer';
 import { renderMermaidToSvg } from './mermaidRenderer.js';
 import { DiagramCache } from './diagramCache.js';
 import {
@@ -11,6 +11,7 @@ import {
     PageDimensions,
     RenderedDiagram,
     MIN_SCALE,
+    BROWSER_ARGS,
 } from './types.js';
 
 /** DPI for mm-to-px conversion (CSS reference pixel) */
@@ -18,14 +19,6 @@ const DPI = 96;
 
 /** Mermaid fenced code block pattern */
 const MERMAID_REGEX = /```mermaid\n([\s\S]*?)```/g;
-
-/** Browser args for PDF generation */
-const BROWSER_ARGS = [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,8 +28,13 @@ const BROWSER_ARGS = [
  * Convert a CSS margin string (e.g. "15mm", "1in", "2cm", "96px") to pixels.
  */
 function marginToPx(value: string): number {
-    const match = value.match(/^(\d+(?:\.\d+)?)(mm|cm|in|px)$/);
-    if (!match) return 0;
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)(mm|cm|in|px)$/);
+    if (!match) {
+        throw new Error(
+            `Invalid margin value "${value}". Expected a number followed by a unit (mm, cm, in, px). Example: "15mm".`
+        );
+    }
     const num = parseFloat(match[1]);
     const unit = match[2];
     switch (unit) {
@@ -44,7 +42,7 @@ function marginToPx(value: string): number {
         case 'cm': return num * (DPI / 2.54);
         case 'in': return num * DPI;
         case 'px': return num;
-        default:   return 0;
+        default:   return num * (DPI / 25.4); // unreachable but satisfies TS
     }
 }
 
@@ -52,7 +50,7 @@ function marginToPx(value: string): number {
  * Compute usable page dimensions in pixels from options.
  */
 function computePageDimensions(options: ConversionOptions): PageDimensions {
-    const pageDef = PAGE_DIMENSIONS[options.pageSize] ?? PAGE_DIMENSIONS['A4'];
+    const pageDef = PAGE_DIMENSIONS[options.pageSize];
     const pageWidth  = pageDef.widthMm  * (DPI / 25.4);
     const pageHeight = pageDef.heightMm * (DPI / 25.4);
 
@@ -64,39 +62,21 @@ function computePageDimensions(options: ConversionOptions): PageDimensions {
     return {
         pageWidth,
         pageHeight,
-        contentWidth:  pageWidth  - marginLeft - marginRight,
-        contentHeight: pageHeight - marginTop  - marginBottom,
+        contentWidth:  Math.max(pageWidth  - marginLeft - marginRight, 1),
+        contentHeight: Math.max(pageHeight - marginTop  - marginBottom, 1),
     };
 }
 
 /**
- * Rewrite an SVG string so that its `width`, `height`, and `viewBox`
+ * Rewrite an SVG string so that its `width` and `height`
  * attributes reflect the desired display dimensions while preserving
- * the natural (intrinsic) coordinate system.
+ * the renderer's viewBox.
  */
-function resizeSvg(
-    svgString: string,
-    naturalWidth: number,
-    naturalHeight: number,
-    displayWidth: number,
-    displayHeight: number,
-): string {
-    // Replace or inject width attribute
+function resizeSvg(svgString: string, displayWidth: number, displayHeight: number): string {
     let svg = svgString;
-
-    // Remove existing width/height attributes
-    svg = svg.replace(/(<svg[^>]*?)\s+width="[^"]*"/,  '$1');
-    svg = svg.replace(/(<svg[^>]*?)\s+height="[^"]*"/, '$1');
-
-    // Remove existing viewBox attribute (we will add our own)
-    svg = svg.replace(/(<svg[^>]*?)\s+viewBox="[^"]*"/, '$1');
-
-    // Inject our attributes right after '<svg'
-    svg = svg.replace(
-        '<svg',
-        `<svg width="${displayWidth}" height="${displayHeight}" viewBox="0 0 ${naturalWidth} ${naturalHeight}"`,
-    );
-
+    // Update width and height but preserve the renderer's viewBox
+    svg = svg.replace(/(<svg[^>]*?)\bwidth="[^"]*"/, `$1width="${displayWidth}"`);
+    svg = svg.replace(/(<svg[^>]*?)\bheight="[^"]*"/, `$1height="${displayHeight}"`);
     return svg;
 }
 
@@ -370,6 +350,10 @@ export class Converter {
     // ------------------------------------------------------------------
 
     private async _convert(markdown: string): Promise<{ pdfBuffer: Buffer; diagramCount: number }> {
+        if (markdown.length > 10 * 1024 * 1024) {
+            throw new Error('Markdown content too large. Maximum size is 10 MB.');
+        }
+
         const dims = computePageDimensions(this.options);
 
         // 1. Find all mermaid code blocks
@@ -402,11 +386,9 @@ export class Converter {
                 const allowBreak = displayHeight > dims.contentHeight;
                 const breakClass = allowBreak ? ' allow-break' : '';
 
-                // Rewrite SVG with display dimensions and proper viewBox
+                // Rewrite SVG with display dimensions, preserving renderer's viewBox
                 const sized = resizeSvg(
                     rendered.svgString,
-                    rendered.width,
-                    rendered.height,
                     displayWidth,
                     displayHeight,
                 );
@@ -417,6 +399,7 @@ export class Converter {
             } catch (err) {
                 // Render failure: embed error box and continue
                 const message = err instanceof Error ? err.message : String(err);
+                console.error(`Warning: Mermaid diagram failed to render: ${message}`);
                 const errorBox = [
                     '<div class="mermaid-error">',
                     '  <h4>Mermaid Diagram (Render Failed)</h4>',
@@ -443,10 +426,16 @@ export class Converter {
     // ------------------------------------------------------------------
 
     private async _generatePdf(html: string): Promise<Buffer> {
-        const browser = await puppeteer.launch({
-            headless: true,
-            args: BROWSER_ARGS,
-        });
+        let browser: Browser;
+        try {
+            browser = await puppeteer.launch({
+                headless: true,
+                args: BROWSER_ARGS,
+            });
+        } catch (launchErr) {
+            const msg = launchErr instanceof Error ? launchErr.message : String(launchErr);
+            throw new Error(`Failed to launch browser for PDF generation: ${msg}`);
+        }
 
         try {
             const page = await browser.newPage();
@@ -475,7 +464,11 @@ export class Converter {
 
             return Buffer.from(pdfUint8);
         } finally {
-            await browser.close();
+            try {
+                await browser.close();
+            } catch (closeErr) {
+                console.error('Warning: Failed to close PDF browser:', closeErr instanceof Error ? closeErr.message : String(closeErr));
+            }
         }
     }
 }

@@ -39,20 +39,46 @@ Examples:
         switch (argv[i]) {
             case '-o':
             case '--output':
+                if (i + 1 >= argv.length || argv[i + 1].startsWith('-')) {
+                    console.error('Error: --output requires a file path argument.');
+                    process.exit(1);
+                }
                 outputFile = argv[++i];
                 break;
             case '-t':
-            case '--theme':
-                theme = argv[++i] as 'light' | 'dark';
-                break;
-            case '-p':
-            case '--page':
-                pageSize = argv[++i] as 'A4' | 'Letter' | 'Legal';
-                break;
-            default:
-                if (!argv[i].startsWith('-')) {
-                    inputFile = argv[i];
+            case '--theme': {
+                if (i + 1 >= argv.length || argv[i + 1].startsWith('-')) {
+                    console.error('Error: --theme requires a value (light or dark).');
+                    process.exit(1);
                 }
+                const t = argv[++i];
+                if (t !== 'light' && t !== 'dark') {
+                    console.error(`Error: Invalid theme "${t}". Must be "light" or "dark".`);
+                    process.exit(1);
+                }
+                theme = t;
+                break;
+            }
+            case '-p':
+            case '--page': {
+                if (i + 1 >= argv.length || argv[i + 1].startsWith('-')) {
+                    console.error('Error: --page requires a value (A4, Letter, or Legal).');
+                    process.exit(1);
+                }
+                const p = argv[++i];
+                if (p !== 'A4' && p !== 'Letter' && p !== 'Legal') {
+                    console.error(`Error: Invalid page size "${p}". Must be "A4", "Letter", or "Legal".`);
+                    process.exit(1);
+                }
+                pageSize = p;
+                break;
+            }
+            default:
+                if (argv[i].startsWith('-')) {
+                    console.error(`Error: Unknown option "${argv[i]}". Use --help for usage.`);
+                    process.exit(1);
+                }
+                inputFile = argv[i];
                 break;
         }
     }

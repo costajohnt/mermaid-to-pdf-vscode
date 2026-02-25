@@ -3,16 +3,10 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { RenderedDiagram } from './types.js';
+import { BROWSER_ARGS } from './types.js';
 
 // Module-level browser singleton (lazy-init)
 let browserInstance: Browser | null = null;
-
-const BROWSER_ARGS = [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-];
 
 const RENDER_TIMEOUT = 30_000;
 const PADDING = 10;
@@ -38,36 +32,25 @@ export async function closeBrowser(): Promise<void> {
     if (browserInstance) {
         try {
             await browserInstance.close();
-        } catch {
-            // Ignore close errors
+        } catch (err) {
+            console.error('Warning: Failed to close browser:', err instanceof Error ? err.message : String(err));
         }
         browserInstance = null;
     }
 }
 
 /**
- * Load the vendored mermaid.min.js source code.
+ * Load the vendored mermaid.min.js source code (cached at module level).
  */
+let _mermaidScriptCache: string | null = null;
+
 function loadMermaidScript(): string {
+    if (_mermaidScriptCache) return _mermaidScriptCache;
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
     const mermaidPath = resolve(__dirname, 'vendor', 'mermaid.min.js');
-    return readFileSync(mermaidPath, 'utf-8');
-}
-
-/**
- * Render a Mermaid diagram to SVG with measured dimensions.
- *
- * @param code - The Mermaid diagram source code
- * @param theme - Optional mermaid theme (default: 'default')
- * @returns A RenderedDiagram with the SVG string and pixel dimensions
- */
-/**
- * @deprecated Use renderMermaidToSvg instead. This stub exists for backward
- * compatibility while other modules are migrated (Tasks 4-7).
- */
-export async function renderMermaid(mermaidCode: string, _outputPath: string): Promise<void> {
-    await renderMermaidToSvg(mermaidCode);
+    _mermaidScriptCache = readFileSync(mermaidPath, 'utf-8');
+    return _mermaidScriptCache;
 }
 
 /**
@@ -84,6 +67,12 @@ export async function renderMermaidToSvg(
     // Validate input
     if (!code || typeof code !== 'string' || code.trim().length === 0) {
         throw new Error('Mermaid code must be a non-empty string');
+    }
+
+    if (code.length > 50_000) {
+        throw new Error(
+            `Mermaid code too large (${(code.length / 1024).toFixed(1)} KB). Maximum size is 50 KB.`
+        );
     }
 
     const browser = await getBrowser();
@@ -192,19 +181,25 @@ export async function renderMermaidToSvg(
             PADDING,
         );
 
+        if (!result || typeof result.svgString !== 'string' || !result.svgString.includes('<svg') ||
+            typeof result.width !== 'number' || result.width <= 0 ||
+            typeof result.height !== 'number' || result.height <= 0) {
+            throw new Error('Failed to render Mermaid diagram: invalid SVG output');
+        }
+
         return result as RenderedDiagram;
     } catch (error) {
         // Re-throw with a consistent message prefix if not already formatted
         const msg = error instanceof Error ? error.message : String(error);
-        if (msg.startsWith('Failed to render') || msg.includes('non-empty string')) {
+        if (msg.startsWith('Failed to render') || msg.includes('non-empty string') || msg.includes('too large')) {
             throw error;
         }
         throw new Error(`Failed to render Mermaid diagram: ${msg}`);
     } finally {
         try {
             await page.close();
-        } catch {
-            // Ignore page close errors
+        } catch (closeErr) {
+            console.error('Warning: Failed to close page:', closeErr instanceof Error ? closeErr.message : String(closeErr));
         }
     }
 }

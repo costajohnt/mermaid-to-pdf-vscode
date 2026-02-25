@@ -1,8 +1,10 @@
 // src/types.ts
 
+export type PageSize = 'A4' | 'Letter' | 'Legal';
+
 export interface ConversionOptions {
     theme: 'light' | 'dark';
-    pageSize: 'A4' | 'Letter' | 'Legal';
+    pageSize: PageSize;
     margins: {
         top: string;
         right: string;
@@ -17,11 +19,6 @@ export interface RenderedDiagram {
     height: number;
 }
 
-export interface DiagramCacheEntry {
-    diagram: RenderedDiagram;
-    timestamp: number;
-}
-
 export interface PageDimensions {
     /** Full page width in px */
     pageWidth: number;
@@ -33,7 +30,7 @@ export interface PageDimensions {
     contentHeight: number;
 }
 
-export const PAGE_DIMENSIONS: Record<string, { widthMm: number; heightMm: number }> = {
+export const PAGE_DIMENSIONS: Record<PageSize, { widthMm: number; heightMm: number }> = {
     'A4': { widthMm: 210, heightMm: 297 },
     'Letter': { widthMm: 215.9, heightMm: 279.4 },
     'Legal': { widthMm: 215.9, heightMm: 355.6 },
@@ -52,3 +49,10 @@ export const DEFAULT_OPTIONS: ConversionOptions = {
 
 /** Minimum scale factor before we allow vertical overflow rather than shrinking further */
 export const MIN_SCALE = 0.6;
+
+export const BROWSER_ARGS = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+];

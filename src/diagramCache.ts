@@ -1,24 +1,20 @@
 // src/diagramCache.ts
 import { createHash } from 'crypto';
-import { RenderedDiagram, DiagramCacheEntry } from './types.js';
+import { RenderedDiagram } from './types.js';
 
 export class DiagramCache {
-    private cache = new Map<string, DiagramCacheEntry>();
+    private cache = new Map<string, RenderedDiagram>();
 
     private hash(code: string): string {
         return createHash('sha256').update(code.trim()).digest('hex');
     }
 
     get(mermaidCode: string): RenderedDiagram | null {
-        const entry = this.cache.get(this.hash(mermaidCode));
-        return entry ? entry.diagram : null;
+        return this.cache.get(this.hash(mermaidCode)) ?? null;
     }
 
     set(mermaidCode: string, diagram: RenderedDiagram): void {
-        this.cache.set(this.hash(mermaidCode), {
-            diagram,
-            timestamp: Date.now(),
-        });
+        this.cache.set(this.hash(mermaidCode), diagram);
     }
 
     clear(): void {

@@ -1,25 +1,25 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { ConversionOptions, ConversionResult, FileConversionResult } from './types.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class MermaidConverter {
     constructor(private logger: any) {}
 
     private async findCli(): Promise<string> {
         try {
-            await execAsync('which markdown-mermaid-converter');
-            return 'markdown-mermaid-converter';
+            const { stdout } = await execFileAsync('which', ['markdown-mermaid-converter']);
+            return stdout.trim();
         } catch {
             // Try local build relative to the MCP server
             const __dirname = path.dirname(new URL(import.meta.url).pathname);
             const localCli = path.resolve(__dirname, '../../../dist/cli.js');
             try {
                 await fs.access(localCli);
-                return `node "${localCli}"`;
+                return localCli;
             } catch {
                 throw new Error('CLI tool not found. Install globally or build the CLI package.');
             }
@@ -36,14 +36,16 @@ export class MermaidConverter {
             await fs.writeFile(inputFile, markdown, 'utf-8');
 
             const cli = await this.findCli();
-            const args = [
-                `"${inputFile}"`,
-                `-o "${outputFile}"`,
-                options.theme ? `-t ${options.theme}` : '',
-                options.pageSize ? `-p ${options.pageSize}` : '',
-            ].filter(Boolean).join(' ');
+            const cliArgs = [inputFile, '-o', outputFile];
+            if (options.theme) cliArgs.push('-t', options.theme);
+            if (options.pageSize) cliArgs.push('-p', options.pageSize);
 
-            await execAsync(`${cli} ${args}`, { timeout: 60000 });
+            // If CLI is a path to a JS file, run it with node
+            if (cli.endsWith('.js')) {
+                await execFileAsync('node', [cli, ...cliArgs], { timeout: 60000 });
+            } else {
+                await execFileAsync(cli, cliArgs, { timeout: 60000 });
+            }
 
             const pdfBuffer = await fs.readFile(outputFile);
             const diagramCount = (markdown.match(/```mermaid\n/g) || []).length;
@@ -57,22 +59,32 @@ export class MermaidConverter {
                 },
             };
         } finally {
-            await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+            } catch (cleanupErr) {
+                console.error(
+                    `Warning: Failed to clean up temp directory ${tempDir}:`,
+                    cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
+                );
+            }
         }
     }
 
     async convertFileToFile(inputPath: string, outputPath?: string, options: ConversionOptions = {}): Promise<FileConversionResult> {
         const resolvedOutput = outputPath || inputPath.replace(/\.md$/i, '.pdf');
         const cli = await this.findCli();
-        const args = [
-            `"${inputPath}"`,
-            `-o "${resolvedOutput}"`,
-            options.theme ? `-t ${options.theme}` : '',
-            options.pageSize ? `-p ${options.pageSize}` : '',
-        ].filter(Boolean).join(' ');
+        const cliArgs = [inputPath, '-o', resolvedOutput];
+        if (options.theme) cliArgs.push('-t', options.theme);
+        if (options.pageSize) cliArgs.push('-p', options.pageSize);
 
         const startTime = Date.now();
-        await execAsync(`${cli} ${args}`, { timeout: 60000 });
+
+        // If CLI is a path to a JS file, run it with node
+        if (cli.endsWith('.js')) {
+            await execFileAsync('node', [cli, ...cliArgs], { timeout: 60000 });
+        } else {
+            await execFileAsync(cli, cliArgs, { timeout: 60000 });
+        }
 
         const stat = await fs.stat(resolvedOutput);
         const markdown = await fs.readFile(inputPath, 'utf-8');

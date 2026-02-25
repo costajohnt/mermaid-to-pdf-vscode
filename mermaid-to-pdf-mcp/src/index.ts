@@ -14,7 +14,7 @@ import { ConversionOptions } from './types.js';
 const logger = {
   info: () => {},
   error: (obj: any, msg?: string) => console.error(msg || (obj instanceof Error ? obj.message : String(obj))),
-  warn: () => {},
+  warn: (obj: any, msg?: string) => console.error(`[warn] ${msg || (obj instanceof Error ? obj.message : String(obj))}`),
   debug: () => {}
 };
 
@@ -49,7 +49,7 @@ const TOOLS = {
           properties: {
             title: { type: 'string' },
             outputPath: { type: 'string' },
-            theme: { type: 'string', enum: ['light', 'dark', 'auto'] },
+            theme: { type: 'string', enum: ['light', 'dark'] },
             pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] },
           }
         }
@@ -69,7 +69,7 @@ const TOOLS = {
           type: 'object',
           properties: {
             title: { type: 'string' },
-            theme: { type: 'string', enum: ['light', 'dark', 'auto'] },
+            theme: { type: 'string', enum: ['light', 'dark'] },
             pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] }
           }
         }
@@ -89,7 +89,7 @@ const TOOLS = {
         options: {
           type: 'object',
           properties: {
-            theme: { type: 'string', enum: ['light', 'dark', 'auto'] },
+            theme: { type: 'string', enum: ['light', 'dark'] },
             pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] }
           }
         }
