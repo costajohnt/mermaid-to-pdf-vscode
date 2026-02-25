@@ -1,28 +1,26 @@
+// src/cli.test.ts
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { FinalMermaidToPdfConverter } from './finalConverter.js';
+import { Converter } from './converter.js';
 
 describe('CLI Tool Tests', () => {
-    test('FinalMermaidToPdfConverter can be instantiated', () => {
-        const converter = new FinalMermaidToPdfConverter();
+    test('Converter can be instantiated with defaults', () => {
+        const converter = new Converter();
         assert.ok(converter);
-        assert.ok(typeof converter.convert === 'function');
+        assert.ok(typeof converter.convertFile === 'function');
+        assert.ok(typeof converter.convertString === 'function');
     });
 
-    test('FinalMermaidToPdfConverter accepts valid options', () => {
-        const converter = new FinalMermaidToPdfConverter({
-            quality: 'high',
+    test('Converter accepts valid options', () => {
+        const converter = new Converter({
             theme: 'dark',
-            pageSize: 'A4'
+            pageSize: 'Letter',
         });
         assert.ok(converter);
     });
 
-    test('CLI tool has help functionality', async () => {
-        // Test that help doesn't throw errors
+    test('CLI module exports main', async () => {
         const { main } = await import('./cli.js');
-        // We can't easily test the CLI without mocking process.argv, 
-        // but we can at least ensure the module loads
         assert.ok(main);
     });
 });

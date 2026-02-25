@@ -8,119 +8,20 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { MermaidConverter } from './converter.js';
-import { ConversionOptions, ConversionResult } from './types.js';
-import { createHash } from 'crypto';
+import { ConversionOptions } from './types.js';
+import { homedir } from 'os';
+import path from 'path';
 
 // Silent logger - only log errors to avoid MCP noise
 const logger = {
   info: () => {},
   error: (obj: any, msg?: string) => console.error(msg || (obj instanceof Error ? obj.message : String(obj))),
-  warn: () => {},
+  warn: (obj: any, msg?: string) => console.error(`[warn] ${msg || (obj instanceof Error ? obj.message : String(obj))}`),
   debug: () => {}
 };
 
-// Simple response cache (5 minute TTL)
-const responseCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-// Operation timeouts
-const OPERATION_TIMEOUTS = {
-  validation: 10 * 1000,    // 10 seconds for syntax validation
-  extraction: 30 * 1000,    // 30 seconds for diagram extraction
-  conversion: 60 * 1000,    // 60 seconds for PDF conversion
-};
-
-// Timeout wrapper for operations
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => 
-      setTimeout(() => reject(new Error(`${operation} timed out after ${timeoutMs}ms`)), timeoutMs)
-    )
-  ]);
-}
-
-// Progress tracking for long operations
-class OperationProgress {
-  private startTime = Date.now();
-  
-  constructor(private operation: string) {}
-  
-  getElapsed(): number {
-    return Date.now() - this.startTime;
-  }
-  
-  log(step: string): void {
-    // Silent progress tracking - no actual logging to avoid noise
-    // This could be expanded later for debugging if needed
-  }
-}
-
-function getCacheKey(method: string, args: any): string {
-  return createHash('sha256')
-    .update(method)
-    .update(JSON.stringify(args))
-    .digest('hex').substring(0, 16);
-}
-
-function getCachedResponse(key: string): any | null {
-  const cached = responseCache.get(key);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
-  }
-  responseCache.delete(key);
-  return null;
-}
-
-function setCachedResponse(key: string, data: any): void {
-  responseCache.set(key, { data, timestamp: Date.now() });
-  
-  // Clean old entries
-  if (responseCache.size > 100) {
-    const cutoff = Date.now() - CACHE_TTL;
-    for (const [k, v] of responseCache.entries()) {
-      if (v.timestamp < cutoff) {
-        responseCache.delete(k);
-      }
-    }
-  }
-}
-
-// Initialize converter with enhanced resource management
+// Initialize converter (thin CLI wrapper)
 const converter = new MermaidConverter(logger);
-
-// Browser pool management
-let isCleaningUp = false;
-const BROWSER_IDLE_TIMEOUT = 30 * 1000; // 30 seconds
-let browserIdleTimer: NodeJS.Timeout | null = null;
-
-// Schedule browser cleanup after idle period
-function scheduleBrowserCleanup() {
-  if (browserIdleTimer) {
-    clearTimeout(browserIdleTimer);
-  }
-  
-  browserIdleTimer = setTimeout(async () => {
-    if (!isCleaningUp) {
-      isCleaningUp = true;
-      try {
-        await converter.cleanup();
-      } catch (error) {
-        logger.error(error, 'Browser cleanup failed');
-      } finally {
-        isCleaningUp = false;
-      }
-    }
-  }, BROWSER_IDLE_TIMEOUT);
-}
-
-// Cancel browser cleanup if new operation starts
-function cancelBrowserCleanup() {
-  if (browserIdleTimer) {
-    clearTimeout(browserIdleTimer);
-    browserIdleTimer = null;
-  }
-}
 
 // Create MCP server
 const server = new Server(
@@ -136,6 +37,33 @@ const server = new Server(
   }
 );
 
+// Option validation
+const VALID_THEMES = new Set(['light', 'dark']);
+const VALID_PAGES = new Set(['A4', 'Letter', 'Legal']);
+
+function validateOptions(raw: unknown): ConversionOptions {
+    if (raw != null && (typeof raw !== 'object' || Array.isArray(raw))) {
+        throw new McpError(
+            ErrorCode.InvalidParams,
+            `"options" must be an object, got ${typeof raw}`
+        );
+    }
+    const obj = (raw ?? {}) as Record<string, unknown>;
+    const opts: ConversionOptions = {};
+    if (obj.title != null) opts.title = String(obj.title);
+    if (obj.theme != null) {
+        if (!VALID_THEMES.has(obj.theme as string))
+            throw new McpError(ErrorCode.InvalidParams, `Invalid theme: ${obj.theme}. Must be "light" or "dark".`);
+        opts.theme = obj.theme as 'light' | 'dark';
+    }
+    if (obj.pageSize != null) {
+        if (!VALID_PAGES.has(obj.pageSize as string))
+            throw new McpError(ErrorCode.InvalidParams, `Invalid pageSize: ${obj.pageSize}. Must be "A4", "Letter", or "Legal".`);
+        opts.pageSize = obj.pageSize as 'A4' | 'Letter' | 'Legal';
+    }
+    return opts;
+}
+
 // Tool definitions
 const TOOLS = {
   convertMarkdownToPdf: {
@@ -150,18 +78,8 @@ const TOOLS = {
           properties: {
             title: { type: 'string' },
             outputPath: { type: 'string' },
-            quality: { type: 'string', enum: ['draft', 'standard', 'high'] },
-            theme: { type: 'string', enum: ['light', 'dark', 'auto'] },
+            theme: { type: 'string', enum: ['light', 'dark'] },
             pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] },
-            margins: {
-              type: 'object',
-              properties: {
-                top: { type: 'string' },
-                right: { type: 'string' },
-                bottom: { type: 'string' },
-                left: { type: 'string' }
-              }
-            }
           }
         }
       },
@@ -180,8 +98,7 @@ const TOOLS = {
           type: 'object',
           properties: {
             title: { type: 'string' },
-            quality: { type: 'string', enum: ['draft', 'standard', 'high'] },
-            theme: { type: 'string', enum: ['light', 'dark', 'auto'] },
+            theme: { type: 'string', enum: ['light', 'dark'] },
             pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] }
           }
         }
@@ -189,7 +106,7 @@ const TOOLS = {
       required: ['markdown']
     }
   },
-  
+
   convertMarkdownFileToFile: {
     name: 'convert_markdown_file_to_pdf',
     description: 'Convert MD file to PDF file',
@@ -201,8 +118,7 @@ const TOOLS = {
         options: {
           type: 'object',
           properties: {
-            quality: { type: 'string', enum: ['draft', 'standard', 'high'] },
-            theme: { type: 'string', enum: ['light', 'dark', 'auto'] },
+            theme: { type: 'string', enum: ['light', 'dark'] },
             pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] }
           }
         }
@@ -210,32 +126,6 @@ const TOOLS = {
       required: ['inputPath']
     }
   },
-
-  extractMermaidDiagrams: {
-    name: 'extract_mermaid_diagrams',
-    description: 'Extract Mermaid diagrams as images',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        markdown: { type: 'string' },
-        format: { type: 'string', enum: ['png', 'svg'] }
-      },
-      required: ['markdown']
-    }
-  },
-
-  validateMermaidSyntax: {
-    name: 'validate_mermaid_syntax',
-    description: 'Validate Mermaid syntax',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        mermaidCode: { type: 'string' }
-      },
-      required: ['mermaidCode']
-    }
-  },
-
 };
 
 // Handle list tools request
@@ -249,22 +139,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  // Check cache for non-file operations
-  const cacheableOps = ['validate_mermaid_syntax', 'extract_mermaid_diagrams'];
-  if (cacheableOps.includes(name)) {
-    const cacheKey = getCacheKey(name, args);
-    const cached = getCachedResponse(cacheKey);
-    if (cached) {
-      return cached;
-    }
-  }
-
   try {
-
     switch (name) {
       case 'convert_markdown_to_pdf': {
-        const { markdown, options = {} } = args as any;
-        
+        const { markdown, options: rawOpts = {} } = args as any;
+
         if (!markdown || typeof markdown !== 'string') {
           throw new McpError(
             ErrorCode.InvalidParams,
@@ -272,27 +151,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
-        // Generate a default output path if not provided
-        const title = options.title || 'Document';
-        const safeTitle = title.replace(/[^a-zA-Z0-9\-_]/g, '_');
-        const defaultPath = `${process.env.HOME}/Desktop/${safeTitle}.pdf`;
-        const outputPath = options.outputPath || defaultPath;
+        if (rawOpts.outputPath != null && typeof rawOpts.outputPath !== 'string') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'outputPath must be a string when provided'
+          );
+        }
 
-        // Use the file-to-file converter to save directly to disk with timeout
-        const progress = new OperationProgress('PDF conversion');
-        progress.log('Starting conversion');
-        
-        cancelBrowserCleanup(); // Keep browser alive during operation
-        
-        const result = await withTimeout(
-          converter.convertFileToFileFromContent(markdown, outputPath, options as ConversionOptions),
-          OPERATION_TIMEOUTS.conversion,
-          'PDF conversion'
-        );
-        
-        progress.log(`Completed in ${progress.getElapsed()}ms`);
-        scheduleBrowserCleanup(); // Schedule cleanup after idle period
-        
+        const validatedOpts = validateOptions(rawOpts);
+
+        // Generate a default output path if not provided
+        const title = rawOpts.title || 'Document';
+        const safeTitle = title.replace(/[^a-zA-Z0-9\-_]/g, '_');
+        const defaultPath = path.join(homedir(), 'Desktop', `${safeTitle}.pdf`);
+        const outputPath = rawOpts.outputPath || defaultPath;
+
+        const result = await converter.convertFileToFileFromContent(markdown, outputPath, validatedOpts);
+
         return {
           content: [
             {
@@ -308,8 +183,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'convert_markdown_to_pdf_data': {
-        const { markdown, options = {} } = args as any;
-        
+        const { markdown, options: rawOpts = {} } = args as any;
+
         if (!markdown || typeof markdown !== 'string') {
           throw new McpError(
             ErrorCode.InvalidParams,
@@ -317,23 +192,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
+        const validatedOpts = validateOptions(rawOpts);
+        const result = await converter.convertMarkdownToPdf(markdown, validatedOpts);
 
-        const result = await withTimeout(
-          converter.convertMarkdownToPdf(markdown, options as ConversionOptions),
-          OPERATION_TIMEOUTS.conversion,
-          'PDF conversion'
-        );
-        
         const response: any = {
           pdf: result.pdfBase64,
           size: result.metadata.fileSize,
           diagrams: result.metadata.diagramCount
         };
-        
+
         if (markdown.length > 10000) {
           response.warn = 'Large content - use convert_markdown_to_pdf instead';
         }
-        
+
         return {
           content: [
             {
@@ -345,8 +216,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'convert_markdown_file_to_pdf': {
-        const { inputPath, outputPath, options = {} } = args as any;
-        
+        const { inputPath, outputPath, options: rawOpts = {} } = args as any;
+
         if (!inputPath || typeof inputPath !== 'string') {
           throw new McpError(
             ErrorCode.InvalidParams,
@@ -354,12 +225,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
-        const result = await withTimeout(
-          converter.convertFileToFile(inputPath, outputPath, options as ConversionOptions),
-          OPERATION_TIMEOUTS.conversion,
-          'File conversion'
-        );
-        
+        if (outputPath != null && typeof outputPath !== 'string') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'outputPath must be a string when provided'
+          );
+        }
+
+        const validatedOpts = validateOptions(rawOpts);
+        const result = await converter.convertFileToFile(inputPath, outputPath, validatedOpts);
+
         return {
           content: [
             {
@@ -374,86 +249,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'extract_mermaid_diagrams': {
-        const { markdown, format = 'png' } = args as any;
-        
-        if (!markdown || typeof markdown !== 'string') {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            'markdown parameter is required and must be a string'
-          );
-        }
-
-        cancelBrowserCleanup(); // Keep browser alive during operation
-        
-        const diagrams = await withTimeout(
-          converter.extractMermaidDiagrams(markdown, format),
-          OPERATION_TIMEOUTS.extraction,
-          'Diagram extraction'
-        );
-        
-        scheduleBrowserCleanup(); // Schedule cleanup after idle period
-        
-        const response = {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                count: diagrams.length,
-                diagrams: diagrams.map(d => ({
-                  i: d.index,
-                  img: d.imageBase64,
-                  fmt: d.format
-                }))
-              })
-            }
-          ]
-        };
-        
-        // Cache extraction results
-        const cacheKey = getCacheKey(name, args);
-        setCachedResponse(cacheKey, response);
-        
-        return response;
-      }
-
-      case 'validate_mermaid_syntax': {
-        const { mermaidCode } = args as any;
-        
-        if (!mermaidCode || typeof mermaidCode !== 'string') {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            'mermaidCode parameter is required and must be a string'
-          );
-        }
-
-        cancelBrowserCleanup(); // Keep browser alive during operation
-        
-        const validation = await withTimeout(
-          converter.validateMermaidSyntax(mermaidCode),
-          OPERATION_TIMEOUTS.validation,
-          'Syntax validation'
-        );
-        
-        scheduleBrowserCleanup(); // Schedule cleanup after idle period
-        
-        const response = {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(validation)
-            }
-          ]
-        };
-        
-        // Cache validation results
-        const cacheKey = getCacheKey(name, args);
-        setCachedResponse(cacheKey, response);
-        
-        return response;
-      }
-
-
       default:
         throw new McpError(
           ErrorCode.MethodNotFound,
@@ -461,60 +256,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
     }
   } catch (error) {
-    // Ensure browser cleanup is scheduled even on errors
-    scheduleBrowserCleanup();
-    
     logger.error(error, `Tool ${name} failed`);
-    
+
     if (error instanceof McpError) {
       throw error;
     }
-    
-    // Provide more specific error messages
+
     const errorMessage = error instanceof Error ? error.message : String(error);
-    let errorCode = ErrorCode.InternalError;
-    let userMessage = `Tool execution failed: ${errorMessage}`;
-    
-    // Handle timeout errors specifically
-    if (errorMessage.includes('timed out')) {
-      errorCode = ErrorCode.InternalError;
-      userMessage = `Operation timed out. This usually indicates the system is under heavy load or the operation is too complex. Please try again or simplify your request.`;
-    }
-    
-    // Handle browser/Puppeteer errors
-    if (errorMessage.includes('browser') || errorMessage.includes('page') || errorMessage.includes('Protocol error')) {
-      userMessage = `Browser operation failed. This may be due to system resources or browser initialization issues. Please try again.`;
-    }
-    
-    throw new McpError(errorCode, userMessage);
+    throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${errorMessage}`);
   }
 });
 
-// Cleanup on exit
+// Cleanup on signal (do NOT register on 'exit' -- async work cannot complete in that handler)
+let isCleaningUp = false;
+
 async function cleanup() {
+  if (isCleaningUp) return;
   isCleaningUp = true;
-  
-  // Cancel any pending browser cleanup timer
-  if (browserIdleTimer) {
-    clearTimeout(browserIdleTimer);
-    browserIdleTimer = null;
-  }
-  
   try {
     await converter.cleanup();
   } catch (error) {
     logger.error(error, 'Final cleanup failed');
   }
-  
-  // Clear response cache
-  responseCache.clear();
-  
   process.exit(0);
 }
 
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
-process.on('exit', cleanup);
 
 // Start the server
 async function main() {

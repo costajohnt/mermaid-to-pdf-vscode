@@ -23,11 +23,7 @@
   "author": "Markdown Mermaid Converter Team",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.1",
-    "marked": "^11.0.0",
-    "pino": "^8.0.0",
-    "pino-pretty": "^10.0.0",
-    "puppeteer": "^22.8.2"
+    "@modelcontextprotocol/sdk": "^1.17.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
