@@ -68,9 +68,9 @@ export class MermaidConverter {
             try {
                 await fs.rm(tempDir, { recursive: true, force: true });
             } catch (cleanupErr) {
-                console.error(
-                    `Warning: Failed to clean up temp directory ${tempDir}:`,
-                    cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
+                this.logger.warn(
+                    cleanupErr,
+                    `Failed to clean up temp directory ${tempDir}`
                 );
             }
         }

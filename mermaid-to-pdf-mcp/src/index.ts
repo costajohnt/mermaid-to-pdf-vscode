@@ -41,18 +41,25 @@ const server = new Server(
 const VALID_THEMES = new Set(['light', 'dark']);
 const VALID_PAGES = new Set(['A4', 'Letter', 'Legal']);
 
-function validateOptions(raw: Record<string, unknown>): ConversionOptions {
-    const opts: ConversionOptions = {};
-    if (raw.title != null) opts.title = String(raw.title);
-    if (raw.theme != null) {
-        if (!VALID_THEMES.has(raw.theme as string))
-            throw new McpError(ErrorCode.InvalidParams, `Invalid theme: ${raw.theme}. Must be "light" or "dark".`);
-        opts.theme = raw.theme as 'light' | 'dark';
+function validateOptions(raw: unknown): ConversionOptions {
+    if (raw != null && (typeof raw !== 'object' || Array.isArray(raw))) {
+        throw new McpError(
+            ErrorCode.InvalidParams,
+            `"options" must be an object, got ${typeof raw}`
+        );
     }
-    if (raw.pageSize != null) {
-        if (!VALID_PAGES.has(raw.pageSize as string))
-            throw new McpError(ErrorCode.InvalidParams, `Invalid pageSize: ${raw.pageSize}. Must be "A4", "Letter", or "Legal".`);
-        opts.pageSize = raw.pageSize as 'A4' | 'Letter' | 'Legal';
+    const obj = (raw ?? {}) as Record<string, unknown>;
+    const opts: ConversionOptions = {};
+    if (obj.title != null) opts.title = String(obj.title);
+    if (obj.theme != null) {
+        if (!VALID_THEMES.has(obj.theme as string))
+            throw new McpError(ErrorCode.InvalidParams, `Invalid theme: ${obj.theme}. Must be "light" or "dark".`);
+        opts.theme = obj.theme as 'light' | 'dark';
+    }
+    if (obj.pageSize != null) {
+        if (!VALID_PAGES.has(obj.pageSize as string))
+            throw new McpError(ErrorCode.InvalidParams, `Invalid pageSize: ${obj.pageSize}. Must be "A4", "Letter", or "Legal".`);
+        opts.pageSize = obj.pageSize as 'A4' | 'Letter' | 'Legal';
     }
     return opts;
 }
@@ -208,6 +215,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new McpError(
             ErrorCode.InvalidParams,
             'inputPath parameter is required and must be a string'
+          );
+        }
+
+        if (outputPath != null && typeof outputPath !== 'string') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'outputPath must be a string when provided'
           );
         }
 

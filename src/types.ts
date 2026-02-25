@@ -45,9 +45,9 @@ export const DEFAULT_OPTIONS: ConversionOptions = Object.freeze({
 /** Minimum scale factor before we allow vertical overflow rather than shrinking further */
 export const MIN_SCALE = 0.6;
 
-export const BROWSER_ARGS = [
+export const BROWSER_ARGS: readonly string[] = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
     '--disable-gpu',
-];
+] as const;

@@ -7,22 +7,35 @@ import { BROWSER_ARGS } from './types.js';
 
 // Module-level browser singleton (lazy-init)
 let browserInstance: Browser | null = null;
+let browserLaunchPromise: Promise<Browser> | null = null;
 
 const RENDER_TIMEOUT = 30_000;
 const PADDING = 10;
 
 /**
  * Get or create the singleton browser instance.
+ * Uses a launch-in-progress promise to prevent duplicate browser launches
+ * from concurrent calls.
  */
 async function getBrowser(): Promise<Browser> {
     if (browserInstance && browserInstance.connected) {
         return browserInstance;
     }
-    browserInstance = await puppeteer.launch({
+    if (browserLaunchPromise) {
+        return browserLaunchPromise;
+    }
+    browserLaunchPromise = puppeteer.launch({
         headless: true,
-        args: BROWSER_ARGS,
+        args: [...BROWSER_ARGS],
+    }).then(browser => {
+        browserInstance = browser;
+        browserLaunchPromise = null;
+        return browser;
+    }).catch(err => {
+        browserLaunchPromise = null;
+        throw err;
     });
-    return browserInstance;
+    return browserLaunchPromise;
 }
 
 /**
@@ -163,14 +176,16 @@ export async function renderMermaidToSvg(
 
                 // Measure via getBBox
                 const bbox = svg.getBBox();
-                const width = Math.ceil(bbox.width + bbox.x + padding * 2);
-                const height = Math.ceil(bbox.height + bbox.y + padding * 2);
 
-                // Set explicit viewBox, width, and height on the SVG
+                // viewBox spans the full bounding box plus padding
                 const viewBoxX = bbox.x - padding;
                 const viewBoxY = bbox.y - padding;
                 const viewBoxW = bbox.width + padding * 2;
                 const viewBoxH = bbox.height + padding * 2;
+
+                // Pixel dimensions must match viewBox dimensions for 1:1 rendering
+                const width = Math.ceil(viewBoxW);
+                const height = Math.ceil(viewBoxH);
                 svg.setAttribute(
                     'viewBox',
                     `${viewBoxX} ${viewBoxY} ${viewBoxW} ${viewBoxH}`,

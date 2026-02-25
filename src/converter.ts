@@ -458,7 +458,7 @@ export class Converter {
         try {
             browser = await puppeteer.launch({
                 headless: true,
-                args: BROWSER_ARGS,
+                args: [...BROWSER_ARGS],
             });
         } catch (launchErr) {
             const msg = launchErr instanceof Error ? launchErr.message : String(launchErr);
