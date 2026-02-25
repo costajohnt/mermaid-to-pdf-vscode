@@ -12,7 +12,12 @@
     "node": ">=18.0.0"
   },
   "type": "module",
-  "main": "./dist/cli.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./cli": "./dist/cli.js"
+  },
   "bin": {
     "markdown-mermaid-converter": "dist/cli.js"
   },
@@ -21,10 +26,10 @@
     "postinstall": "mkdir -p src/vendor && cp node_modules/mermaid/dist/mermaid.min.js src/vendor/mermaid.min.js",
     "start": "node dist/cli.js",
     "dev": "tsx src/cli.ts",
-    "test": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js",
+    "test": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js",
     "test:e2e": "npm run build && node --test dist/e2e.test.js",
-    "test:all": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/e2e.test.js",
-    "lint": "eslint src --ext ts"
+    "test:all": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js dist/e2e.test.js",
+    "lint": "eslint src/ mermaid-to-pdf-mcp/src/"
   },
   "keywords": [
     "markdown",
@@ -38,9 +43,9 @@
   ],
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0",
-    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "eslint": "^9.39.3",
     "tsx": "^4.0.0",
     "typescript": "^5.3.3"
   },

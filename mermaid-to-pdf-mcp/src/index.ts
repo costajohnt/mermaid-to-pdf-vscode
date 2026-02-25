@@ -7,17 +7,28 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { MermaidConverter } from './converter.js';
-import { ConversionOptions } from './types.js';
+import { MermaidConverter, type Logger } from './converter.js';
 import { homedir } from 'os';
 import path from 'path';
+import { validateOptions, validatePath } from './validation.js';
 
-// Silent logger - only log errors to avoid MCP noise
-const logger = {
-  info: () => {},
-  error: (obj: any, msg?: string) => console.error(msg || (obj instanceof Error ? obj.message : String(obj))),
-  warn: (obj: any, msg?: string) => console.error(`[warn] ${msg || (obj instanceof Error ? obj.message : String(obj))}`),
-  debug: () => {}
+// Re-export validation functions for backward compatibility
+export { validateOptions, validatePath };
+
+// Silent logger — only log errors/warnings to stderr to avoid MCP protocol noise.
+// Enable debug/info with MCP_DEBUG=1.
+const DEBUG = !!process.env.MCP_DEBUG;
+const logger: Logger = {
+  info: DEBUG ? (_obj: unknown, msg?: string) => console.error(`[info] ${msg || String(_obj)}`) : () => {},
+  error: (obj: unknown, msg?: string) => {
+    const detail = obj instanceof Error ? obj.message : String(obj);
+    console.error(msg ? `${msg}: ${detail}` : detail);
+  },
+  warn: (obj: unknown, msg?: string) => {
+    const detail = obj instanceof Error ? obj.message : String(obj);
+    console.error(msg ? `[warn] ${msg}: ${detail}` : `[warn] ${detail}`);
+  },
+  debug: DEBUG ? (_obj: unknown, msg?: string) => console.error(`[debug] ${msg || String(_obj)}`) : () => {},
 };
 
 // Initialize converter (thin CLI wrapper)
@@ -36,33 +47,6 @@ const server = new Server(
     },
   }
 );
-
-// Option validation
-const VALID_THEMES = new Set(['light', 'dark']);
-const VALID_PAGES = new Set(['A4', 'Letter', 'Legal']);
-
-function validateOptions(raw: unknown): ConversionOptions {
-    if (raw != null && (typeof raw !== 'object' || Array.isArray(raw))) {
-        throw new McpError(
-            ErrorCode.InvalidParams,
-            `"options" must be an object, got ${typeof raw}`
-        );
-    }
-    const obj = (raw ?? {}) as Record<string, unknown>;
-    const opts: ConversionOptions = {};
-    if (obj.title != null) opts.title = String(obj.title);
-    if (obj.theme != null) {
-        if (!VALID_THEMES.has(obj.theme as string))
-            throw new McpError(ErrorCode.InvalidParams, `Invalid theme: ${obj.theme}. Must be "light" or "dark".`);
-        opts.theme = obj.theme as 'light' | 'dark';
-    }
-    if (obj.pageSize != null) {
-        if (!VALID_PAGES.has(obj.pageSize as string))
-            throw new McpError(ErrorCode.InvalidParams, `Invalid pageSize: ${obj.pageSize}. Must be "A4", "Letter", or "Legal".`);
-        opts.pageSize = obj.pageSize as 'A4' | 'Letter' | 'Legal';
-    }
-    return opts;
-}
 
 // Tool definitions
 const TOOLS = {
@@ -162,9 +146,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Generate a default output path if not provided
         const title = rawOpts.title || 'Document';
-        const safeTitle = title.replace(/[^a-zA-Z0-9\-_]/g, '_');
+        const safeTitle = title.replace(/[^a-zA-Z0-9\-_]/g, '_').slice(0, 200);
         const defaultPath = path.join(homedir(), 'Desktop', `${safeTitle}.pdf`);
-        const outputPath = rawOpts.outputPath || defaultPath;
+        const outputPath = rawOpts.outputPath
+          ? validatePath(rawOpts.outputPath, 'outputPath')
+          : validatePath(defaultPath, 'outputPath');
 
         const result = await converter.convertFileToFileFromContent(markdown, outputPath, validatedOpts);
 
@@ -232,8 +218,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
+        const validatedInputPath = validatePath(inputPath, 'inputPath');
+        const validatedOutputPath = outputPath != null
+          ? validatePath(outputPath, 'outputPath')
+          : undefined;
+
         const validatedOpts = validateOptions(rawOpts);
-        const result = await converter.convertFileToFile(inputPath, outputPath, validatedOpts);
+        const result = await converter.convertFileToFile(validatedInputPath, validatedOutputPath, validatedOpts);
 
         return {
           content: [

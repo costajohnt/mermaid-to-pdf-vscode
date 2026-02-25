@@ -2,129 +2,92 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
-    name: Build and Test (Node ${{ matrix.node-version }} on ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Build & Test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        node-version: [20.x]
+        node-version: [18.x, 20.x]
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Setup Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
-        
+
     - name: Install dependencies
       run: npm ci
-      
+
     - name: Run linter
       run: npm run lint
-      
+
     - name: Build CLI tool
       run: npm run build
-      
+
     - name: Verify build output
       run: |
-        echo "Checking build output..."
-        if [ ! -d "dist" ]; then
-          echo "Build failed: dist directory not found"
-          exit 1
-        fi
-        if [ ! -f "dist/cli.js" ]; then
-          echo "Build failed: cli.js not found"
-          exit 1
-        fi
-        echo "Build output verified successfully"
+        test -d dist || { echo "Build failed: dist directory not found"; exit 1; }
+        test -f dist/cli.js || { echo "Build failed: cli.js not found"; exit 1; }
+        echo "Build output verified"
       shell: bash
-      
-    - name: Run tests
-      run: |
-        echo "Running CLI tool tests..."
-        npm run test || echo "Tests completed with status $?"
+
+    - name: Run unit tests
+      run: npm run test
       env:
         NODE_ENV: test
-      shell: bash
       timeout-minutes: 5
-      
-    - name: Test CLI functionality
-      run: |
-        echo "Testing CLI tool functionality..."
-        # Create a test markdown file
-        echo "# Test Document" > test-cli.md
-        echo "" >> test-cli.md
-        echo '```mermaid' >> test-cli.md
-        echo 'graph TD' >> test-cli.md
-        echo '    A[Start] --> B[End]' >> test-cli.md
-        echo '```' >> test-cli.md
-        
-        # Test CLI help (this should work without issues)
-        echo "Testing CLI help command..."
-        timeout 30s node dist/cli.js --help || echo "Help command test completed"
-        
-        # Test CLI conversion with timeout and proper cleanup
-        echo "Testing CLI conversion (with timeout)..."
-        timeout 120s node dist/cli.js test-cli.md && echo "✅ CLI conversion successful" || echo "⚠️ CLI conversion completed/timed out (expected in CI)"
-        
-        # Force cleanup any remaining processes
-        pkill -f "node.*cli.js" || true
-        pkill -f "chrome" || true
-        pkill -f "chromium" || true
-        
-        echo "CLI functionality test completed"
-      shell: bash
-      timeout-minutes: 3
-      
-    - name: Upload build artifacts
+
+    - name: Run e2e tests
+      run: npm run test:e2e
+      env:
+        NODE_ENV: test
+      timeout-minutes: 5
+
+    - name: Generate test report
       if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: cli-build-${{ matrix.os }}-node${{ matrix.node-version }}
-        path: |
-          dist/
-          test-results/
-        retention-days: 7
+      run: |
+        echo "## Test Results" >> "$GITHUB_STEP_SUMMARY"
+        echo "- Node: ${{ matrix.node-version }}" >> "$GITHUB_STEP_SUMMARY"
+        echo "- Status: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
 
   code-quality:
-    name: Code Quality Checks
+    name: Code Quality
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20.x'
         cache: 'npm'
-        
+
     - name: Install dependencies
       run: npm ci
-      
+
     - name: Check for security vulnerabilities
       run: npm audit --production
       continue-on-error: true
-      
+
+    - name: TypeScript strict check
+      run: npx tsc --noEmit --strict
+
     - name: Check bundle size
       run: |
         npm run build
-        echo "CLI tool size analysis:"
-        du -sh dist/
-        find dist -name "*.js" -exec ls -lh {} \; | head -20
-      
-    - name: TypeScript strict check
-      run: npx tsc --noEmit --strict
-      continue-on-error: true
+        echo "## Bundle Size" >> "$GITHUB_STEP_SUMMARY"
+        du -sh dist/ >> "$GITHUB_STEP_SUMMARY"

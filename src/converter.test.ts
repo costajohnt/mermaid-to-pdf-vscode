@@ -4,12 +4,13 @@ import { strict as assert } from 'node:assert';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { Converter } from './converter.js';
+import { Converter, closePdfBrowser } from './converter.js';
 import { closeBrowser } from './mermaidRenderer.js';
 
 describe('Converter', () => {
     after(async () => {
         await closeBrowser();
+        await closePdfBrowser();
     });
 
     test('converts plain markdown (no mermaid) to PDF', async () => {
@@ -51,10 +52,12 @@ describe('Converter', () => {
     test('converts markdown string to PDF buffer', async () => {
         const converter = new Converter();
         const md = '# Hello\n\nWorld\n';
-        const buf = await converter.convertString(md);
+        const result = await converter.convertString(md);
 
-        assert.ok(buf.length > 0);
-        assert.equal(buf.slice(0, 5).toString(), '%PDF-');
+        assert.ok(result.pdfBuffer.length > 0);
+        assert.equal(result.pdfBuffer.slice(0, 5).toString(), '%PDF-');
+        assert.equal(result.diagramCount, 0);
+        assert.ok(result.fileSize > 0);
     });
 
     test('handles multiple diagrams', async () => {
@@ -77,8 +80,9 @@ describe('Converter', () => {
             'End text.',
         ].join('\n');
 
-        const buf = await converter.convertString(md);
-        assert.ok(buf.length > 0);
+        const result = await converter.convertString(md);
+        assert.ok(result.pdfBuffer.length > 0);
+        assert.equal(result.diagramCount, 2);
     });
 
     test('handles failed diagram gracefully', async () => {
@@ -86,8 +90,10 @@ describe('Converter', () => {
         const md = '# Test\n\n```mermaid\ninvalid diagram code here\n```\n\nText continues.\n';
 
         // Should NOT throw — should embed error box and continue
-        const buf = await converter.convertString(md);
-        assert.ok(buf.length > 0);
-        assert.equal(buf.slice(0, 5).toString(), '%PDF-');
+        const result = await converter.convertString(md);
+        assert.ok(result.pdfBuffer.length > 0);
+        assert.equal(result.pdfBuffer.slice(0, 5).toString(), '%PDF-');
+        // Failed diagram is NOT counted in diagramCount
+        assert.equal(result.diagramCount, 0);
     });
 });

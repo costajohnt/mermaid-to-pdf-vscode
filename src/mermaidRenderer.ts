@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { RenderedDiagram } from './types.js';
-import { BROWSER_ARGS } from './types.js';
+import { getBrowserArgs } from './types.js';
 
 // Module-level browser singleton (lazy-init)
 let browserInstance: Browser | null = null;
@@ -26,7 +26,7 @@ async function getBrowser(): Promise<Browser> {
     }
     browserLaunchPromise = puppeteer.launch({
         headless: true,
-        args: [...BROWSER_ARGS],
+        args: getBrowserArgs(),
     }).then(browser => {
         browserInstance = browser;
         browserLaunchPromise = null;
@@ -42,6 +42,13 @@ async function getBrowser(): Promise<Browser> {
  * Close the singleton browser instance. Call this during cleanup.
  */
 export async function closeBrowser(): Promise<void> {
+    if (browserLaunchPromise) {
+        try {
+            await browserLaunchPromise;
+        } catch {
+            // launch failed — nothing to close
+        }
+    }
     if (browserInstance) {
         try {
             await browserInstance.close();

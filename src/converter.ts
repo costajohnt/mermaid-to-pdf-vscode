@@ -11,11 +11,56 @@ import {
     PageDimensions,
     RenderedDiagram,
     MIN_SCALE,
-    BROWSER_ARGS,
+    getBrowserArgs,
 } from './types.js';
 
 /** DPI for mm-to-px conversion (CSS reference pixel) */
 const DPI = 96;
+
+// ---------------------------------------------------------------------------
+// PDF browser singleton (separate from the mermaid renderer singleton)
+// ---------------------------------------------------------------------------
+let pdfBrowserInstance: Browser | null = null;
+let pdfBrowserLaunchPromise: Promise<Browser> | null = null;
+
+async function getPdfBrowser(): Promise<Browser> {
+    if (pdfBrowserInstance && pdfBrowserInstance.connected) {
+        return pdfBrowserInstance;
+    }
+    if (pdfBrowserLaunchPromise) {
+        return pdfBrowserLaunchPromise;
+    }
+    pdfBrowserLaunchPromise = puppeteer.launch({
+        headless: true,
+        args: getBrowserArgs(),
+    }).then(browser => {
+        pdfBrowserInstance = browser;
+        pdfBrowserLaunchPromise = null;
+        return browser;
+    }).catch(err => {
+        pdfBrowserLaunchPromise = null;
+        throw err;
+    });
+    return pdfBrowserLaunchPromise;
+}
+
+export async function closePdfBrowser(): Promise<void> {
+    if (pdfBrowserLaunchPromise) {
+        try {
+            await pdfBrowserLaunchPromise;
+        } catch {
+            // launch failed — nothing to close
+        }
+    }
+    if (pdfBrowserInstance) {
+        try {
+            await pdfBrowserInstance.close();
+        } catch (err) {
+            console.error('Warning: Failed to close PDF browser:', err instanceof Error ? err.message : String(err));
+        }
+        pdfBrowserInstance = null;
+    }
+}
 
 /** Mermaid fenced code block pattern */
 const MERMAID_REGEX = /```mermaid\r?\n([\s\S]*?)```/g;
@@ -318,8 +363,15 @@ ${bodyHtml}
 // ---------------------------------------------------------------------------
 
 export interface ConvertFileResult {
+    /** Number of mermaid diagrams successfully rendered */
     diagramCount: number;
+    /** Size of the generated PDF in bytes */
     fileSize: number;
+}
+
+export interface ConvertStringResult extends ConvertFileResult {
+    /** The generated PDF content */
+    pdfBuffer: Buffer;
 }
 
 export class Converter {
@@ -360,11 +412,11 @@ export class Converter {
     }
 
     /**
-     * Convert a markdown string to a PDF Buffer.
+     * Convert a markdown string to a PDF Buffer with metadata.
      */
-    async convertString(markdown: string): Promise<Buffer> {
-        const { pdfBuffer } = await this._convert(markdown);
-        return pdfBuffer;
+    async convertString(markdown: string): Promise<ConvertStringResult> {
+        const { pdfBuffer, diagramCount } = await this._convert(markdown);
+        return { pdfBuffer, diagramCount, fileSize: pdfBuffer.length };
     }
 
     // ------------------------------------------------------------------
@@ -454,20 +506,10 @@ export class Converter {
     // ------------------------------------------------------------------
 
     private async _generatePdf(html: string): Promise<Buffer> {
-        let browser: Browser;
-        try {
-            browser = await puppeteer.launch({
-                headless: true,
-                args: [...BROWSER_ARGS],
-            });
-        } catch (launchErr) {
-            const msg = launchErr instanceof Error ? launchErr.message : String(launchErr);
-            throw new Error(`Failed to launch browser for PDF generation: ${msg}`);
-        }
+        const browser = await getPdfBrowser();
+        const page = await browser.newPage();
 
         try {
-            const page = await browser.newPage();
-
             await page.setContent(html, {
                 waitUntil: ['domcontentloaded', 'networkidle0'],
             });
@@ -493,9 +535,9 @@ export class Converter {
             return Buffer.from(pdfUint8);
         } finally {
             try {
-                await browser.close();
+                await page.close();
             } catch (closeErr) {
-                console.error('Warning: Failed to close PDF browser:', closeErr instanceof Error ? closeErr.message : String(closeErr));
+                console.error('Warning: Failed to close PDF page:', closeErr instanceof Error ? closeErr.message : String(closeErr));
             }
         }
     }

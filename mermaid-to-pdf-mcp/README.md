@@ -1,29 +1,41 @@
-# Mermaid to PDF MCP Server
+# Markdown Mermaid Converter MCP Server
 
-🚀 **Model Context Protocol (MCP) server** for converting Markdown documents with Mermaid diagrams to professional PDFs. Perfect for LLMs that want to create rich, visual documentation.
+**Model Context Protocol (MCP) server** for converting Markdown documents with Mermaid diagrams to PDF. Designed for use with LLMs and AI-powered development tools.
 
 ## Features
 
-- 📄 **Convert Markdown to PDF** with embedded Mermaid diagrams
-- 🎨 **Multiple diagram types**: Flowcharts, sequence diagrams, class diagrams, ER diagrams, and more
-- 🤖 **LLM-optimized**: Built-in custom instructions guide LLMs on best practices
-- ⚡ **High performance**: Browser pooling and diagram caching
-- 🔧 **Configurable**: Quality levels, themes, page sizes, margins
-- 🛡️ **Secure**: Input validation and sandboxed rendering
+- **Convert Markdown to PDF** with rendered Mermaid diagrams
+- **Multiple diagram types**: Flowcharts, sequence diagrams, class diagrams, ER diagrams, and more
+- **SVG-based rendering**: Diagrams are rendered as SVGs with measured layout for accurate sizing
+- **Configurable**: Themes and page sizes
+- **CLI-backed**: Thin wrapper around the `markdown-mermaid-converter` CLI for reliable, consistent output
 
 ## Installation
 
-### Option 1: Install via NPM (Recommended)
+### Option 1: Install via npm (Recommended)
 
 ```bash
-npm install -g @mermaid-to-pdf/mcp-server
+npm install -g markdown-mermaid-converter-mcp
+```
+
+**Note:** The MCP server requires the `markdown-mermaid-converter` CLI to be installed and available on your PATH:
+
+```bash
+npm install -g markdown-mermaid-converter
 ```
 
 ### Option 2: Install from Source
 
 ```bash
 git clone https://github.com/costajohnt/markdown-mermaid-converter.git
-cd markdown-mermaid-converter/mermaid-to-pdf-mcp
+cd markdown-mermaid-converter
+
+# Build the CLI
+npm install
+npm run build
+
+# Build the MCP server
+cd mermaid-to-pdf-mcp
 npm install
 npm run build
 npm link
@@ -38,8 +50,8 @@ Add to your Claude Code settings (`.claude/settings.json`):
 ```json
 {
   "mcpServers": {
-    "mermaid-to-pdf": {
-      "command": "mermaid-to-pdf-mcp",
+    "markdown-mermaid-converter": {
+      "command": "markdown-mermaid-converter-mcp",
       "description": "Convert Markdown with Mermaid diagrams to PDF"
     }
   }
@@ -48,23 +60,7 @@ Add to your Claude Code settings (`.claude/settings.json`):
 
 Then restart Claude Code to load the MCP server.
 
-### For Development Tools with MCP Support
-
-Add to your development tool's MCP configuration:
-
-```json
-{
-  "mcp.servers": [
-    {
-      "name": "mermaid-to-pdf",
-      "command": "mermaid-to-pdf-mcp",
-      "description": "Markdown + Mermaid to PDF converter"
-    }
-  ]
-}
-```
-
-### For Custom MCP Clients
+### For Other MCP Clients
 
 Connect via stdio transport:
 
@@ -73,7 +69,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 const transport = new StdioClientTransport({
-  command: 'mermaid-to-pdf-mcp'
+  command: 'markdown-mermaid-converter-mcp'
 });
 
 const client = new Client(
@@ -87,7 +83,20 @@ await client.connect(transport);
 ## Available Tools
 
 ### 1. `convert_markdown_to_pdf`
-Convert Markdown content to PDF (returns base64).
+
+Convert Markdown content (as a string) to a PDF file saved on disk. If no `outputPath` is provided, the file is saved to `~/Desktop/<title>.pdf`.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `markdown` | string | Yes | Markdown content to convert |
+| `options.outputPath` | string | No | File path for the output PDF |
+| `options.title` | string | No | Document title (also used to generate default filename) |
+| `options.theme` | string | No | `"light"` or `"dark"` |
+| `options.pageSize` | string | No | `"A4"`, `"Letter"`, or `"Legal"` |
+
+**Example:**
 
 ```json
 {
@@ -96,7 +105,7 @@ Convert Markdown content to PDF (returns base64).
     "markdown": "# My Document\n\n```mermaid\nflowchart TD\n    A[Start] --> B[End]\n```",
     "options": {
       "title": "My Document",
-      "quality": "high",
+      "outputPath": "/Users/me/Documents/my-doc.pdf",
       "theme": "light",
       "pageSize": "A4"
     }
@@ -104,72 +113,111 @@ Convert Markdown content to PDF (returns base64).
 }
 ```
 
-### 2. `convert_markdown_file_to_pdf`
-Convert Markdown file to PDF file.
+**Response:**
 
 ```json
 {
-  "name": "convert_markdown_file_to_pdf", 
+  "path": "/Users/me/Documents/my-doc.pdf",
+  "size": 45231,
+  "diagrams": 1
+}
+```
+
+### 2. `convert_markdown_to_pdf_data`
+
+Convert Markdown content to a PDF returned as base64-encoded data. Best for short documents. For large content (over 10,000 characters), a warning is included suggesting `convert_markdown_to_pdf` instead.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `markdown` | string | Yes | Markdown content to convert |
+| `options.title` | string | No | Document title |
+| `options.theme` | string | No | `"light"` or `"dark"` |
+| `options.pageSize` | string | No | `"A4"`, `"Letter"`, or `"Legal"` |
+
+**Example:**
+
+```json
+{
+  "name": "convert_markdown_to_pdf_data",
   "arguments": {
-    "inputPath": "/path/to/document.md",
-    "outputPath": "/path/to/output.pdf",
+    "markdown": "# Quick Note\n\nSome content here.",
     "options": {
-      "quality": "high",
-      "theme": "dark"
+      "title": "Quick Note",
+      "theme": "light",
+      "pageSize": "Letter"
     }
   }
 }
 ```
 
-### 3. `extract_mermaid_diagrams`
-Extract diagrams as individual images.
+**Response:**
 
 ```json
 {
-  "name": "extract_mermaid_diagrams",
+  "pdf": "JVBERi0xLjQK...",
+  "size": 12045,
+  "diagrams": 0
+}
+```
+
+### 3. `convert_markdown_file_to_pdf`
+
+Convert a Markdown file on disk to a PDF file. If no `outputPath` is provided, the output file is placed alongside the input with a `.pdf` extension (e.g., `doc.md` becomes `doc.pdf`).
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `inputPath` | string | Yes | Path to the input Markdown file |
+| `outputPath` | string | No | Path for the output PDF file |
+| `options.theme` | string | No | `"light"` or `"dark"` |
+| `options.pageSize` | string | No | `"A4"`, `"Letter"`, or `"Legal"` |
+
+**Example:**
+
+```json
+{
+  "name": "convert_markdown_file_to_pdf",
   "arguments": {
-    "markdown": "# Doc\n\n```mermaid\nflowchart TD\n    A --> B\n```",
-    "format": "png"
+    "inputPath": "/path/to/document.md",
+    "outputPath": "/path/to/output.pdf",
+    "options": {
+      "theme": "dark",
+      "pageSize": "A4"
+    }
   }
 }
 ```
 
-### 4. `validate_mermaid_syntax`
-Validate Mermaid diagram syntax.
+**Response:**
 
 ```json
 {
-  "name": "validate_mermaid_syntax",
-  "arguments": {
-    "mermaidCode": "flowchart TD\n    A --> B"
-  }
+  "path": "/path/to/output.pdf",
+  "size": 89012,
+  "diagrams": 3
 }
 ```
 
-### 5. `get_custom_instructions`
-Get LLM guidance for optimal usage.
+## Configuration Options
 
-```json
-{
-  "name": "get_custom_instructions",
-  "arguments": {}
-}
-```
+### Themes
 
-## Custom Instructions for LLMs
+- `light` -- Clean, professional look suitable for printed documents (default)
+- `dark` -- Dark background, suited for developer-focused content
 
-This MCP server includes built-in custom instructions that guide LLMs on:
+### Page Sizes
 
-- **When to use the server**: Technical docs, system designs, process flows
-- **Recommended workflow**: Create Markdown first, then convert to PDF
-- **Best practices**: Diagram selection, content structure, quality settings
-- **Example scenarios**: API docs, architecture designs, process documentation
-
-LLMs can call `get_custom_instructions` to receive comprehensive guidance.
+- `A4` -- International standard (210 x 297 mm)
+- `Letter` -- US standard (8.5 x 11 in)
+- `Legal` -- US legal (8.5 x 14 in)
 
 ## Example Usage Scenarios
 
 ### API Documentation
+
 ```markdown
 # REST API Documentation
 
@@ -195,62 +243,22 @@ sequenceDiagram
 ```
 
 ### System Design
+
 ```markdown
 # Microservices Architecture
 
-## Service Architecture
+## Service Map
 
 ```mermaid
 flowchart LR
     Gateway[API Gateway] --> UserSvc[User Service]
     Gateway --> OrderSvc[Order Service]
     Gateway --> PaySvc[Payment Service]
-    
+
     UserSvc --> UserDB[(User DB)]
     OrderSvc --> OrderDB[(Order DB)]
     PaySvc --> PayDB[(Payment DB)]
 ```
-
-## Data Flow
-
-```mermaid
-sequenceDiagram
-    User->>Gateway: Create Order
-    Gateway->>OrderSvc: POST /orders
-    OrderSvc->>PaySvc: Process Payment
-    PaySvc-->>OrderSvc: Payment Success
-    OrderSvc-->>Gateway: Order Created
-    Gateway-->>User: Order Response
-```
-```
-
-## Configuration Options
-
-### Quality Levels
-- `draft`: Fast rendering, lower quality
-- `standard`: Balanced quality and speed (default)
-- `high`: Maximum quality, slower rendering
-
-### Themes
-- `light`: Professional documents (default)
-- `dark`: Developer-focused content
-- `auto`: System preference
-
-### Page Sizes
-- `A4`: International standard (default)
-- `Letter`: US standard
-- `Legal`: US legal documents
-
-### Margins
-```json
-{
-  "margins": {
-    "top": "20mm",
-    "right": "20mm", 
-    "bottom": "20mm",
-    "left": "20mm"
-  }
-}
 ```
 
 ## Supported Diagram Types
@@ -268,40 +276,37 @@ sequenceDiagram
 ## Requirements
 
 - **Node.js**: 18.x or higher
-- **System Memory**: 2GB+ recommended
-- **Disk Space**: 100MB for dependencies
+- **CLI dependency**: The `markdown-mermaid-converter` CLI must be installed and on your PATH
 
 ## Troubleshooting
 
 ### Common Issues
 
-**"Command not found: mermaid-to-pdf-mcp"**
+**"Command not found: markdown-mermaid-converter-mcp"**
 ```bash
 # Reinstall globally
-npm uninstall -g @mermaid-to-pdf/mcp-server
-npm install -g @mermaid-to-pdf/mcp-server
+npm install -g markdown-mermaid-converter-mcp
 ```
 
-**"Failed to render Mermaid diagram"**
-- Check diagram syntax with `validate_mermaid_syntax`
-- Try with simpler diagram first
-- Verify sufficient system memory
+**"CLI tool not found"**
+
+The MCP server delegates to the `markdown-mermaid-converter` CLI. Make sure it is installed:
+
+```bash
+npm install -g markdown-mermaid-converter
+```
+
+If installing from source, build the CLI package first (`npm run build` in the repo root).
 
 **"MCP server connection failed"**
-- Verify server is installed globally
-- Check command path in MCP client config
-- Review client logs for detailed errors
-
-### Debug Mode
-
-Enable detailed logging:
-```bash
-DEBUG=mcp:* mermaid-to-pdf-mcp
-```
+- Verify the server is installed globally or linked via `npm link`
+- Check that the command path in your MCP client config is correct
+- Review client logs for detailed error messages
 
 ## Development
 
 ### Building from Source
+
 ```bash
 git clone https://github.com/costajohnt/markdown-mermaid-converter.git
 cd markdown-mermaid-converter/mermaid-to-pdf-mcp
@@ -310,12 +315,10 @@ npm run build
 ```
 
 ### Testing
-```bash
-# Test MCP server directly
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js
 
-# Test with custom instructions
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_custom_instructions","arguments":{}}}' | node dist/index.js
+```bash
+# List available tools
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js
 ```
 
 ## License
@@ -325,10 +328,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Links
 
 - **Repository**: [GitHub](https://github.com/costajohnt/markdown-mermaid-converter)
-- **CLI Tool**: [Markdown Mermaid Converter CLI](https://github.com/costajohnt/markdown-mermaid-converter)
+- **CLI Tool**: [Markdown Mermaid Converter](https://github.com/costajohnt/markdown-mermaid-converter)
 - **Issues**: [GitHub Issues](https://github.com/costajohnt/markdown-mermaid-converter/issues)
 - **MCP Protocol**: [Model Context Protocol](https://modelcontextprotocol.io)
-
----
-
-**Made with ❤️ for the MCP and LLM community**

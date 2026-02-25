@@ -13,21 +13,25 @@ export interface ConversionOptions {
     };
 }
 
+/**
+ * A mermaid diagram rendered to SVG with measured dimensions.
+ * Instances should only be created by `renderMermaidToSvg()`.
+ */
 export interface RenderedDiagram {
-    svgString: string;
-    width: number;
-    height: number;
+    readonly svgString: string;
+    readonly width: number;
+    readonly height: number;
 }
 
 export interface PageDimensions {
     /** Full page width in px */
-    pageWidth: number;
+    readonly pageWidth: number;
     /** Full page height in px */
-    pageHeight: number;
+    readonly pageHeight: number;
     /** Usable content width after margins in px */
-    contentWidth: number;
+    readonly contentWidth: number;
     /** Usable content height after margins in px */
-    contentHeight: number;
+    readonly contentHeight: number;
 }
 
 export const PAGE_DIMENSIONS = {
@@ -45,9 +49,33 @@ export const DEFAULT_OPTIONS: ConversionOptions = Object.freeze({
 /** Minimum scale factor before we allow vertical overflow rather than shrinking further */
 export const MIN_SCALE = 0.6;
 
-export const BROWSER_ARGS: readonly string[] = [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-] as const;
+/**
+ * Shape of the CLI's --json stdout output.
+ * Shared contract between the CLI and MCP server.
+ */
+export interface CliJsonOutput {
+    outputPath: string;
+    fileSize: number;
+    diagramCount: number;
+    processingTimeMs: number;
+}
+
+/**
+ * Build Puppeteer browser launch arguments.
+ * --no-sandbox is only added in CI or when running as root (common in Docker).
+ */
+export function getBrowserArgs(): string[] {
+    const args = [
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+    ];
+
+    const isCI = !!process.env.CI;
+    const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+
+    if (isCI || isRoot) {
+        args.unshift('--no-sandbox', '--disable-setuid-sandbox');
+    }
+
+    return args;
+}

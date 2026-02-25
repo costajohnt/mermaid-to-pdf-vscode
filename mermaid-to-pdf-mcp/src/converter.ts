@@ -1,21 +1,36 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { tmpdir } from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { ConversionOptions, ConversionResult, FileConversionResult } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
+interface CliJsonResult {
+    outputPath: string;
+    fileSize: number;
+    diagramCount: number;
+    processingTimeMs: number;
+}
+
+export interface Logger {
+    info(obj: unknown, msg?: string): void;
+    error(obj: unknown, msg?: string): void;
+    warn(obj: unknown, msg?: string): void;
+    debug(obj: unknown, msg?: string): void;
+}
+
 export class MermaidConverter {
-    constructor(private logger: any) {}
+    constructor(private logger: Logger) {}
 
     private async findCli(): Promise<string> {
         try {
             const cmd = process.platform === 'win32' ? 'where' : 'which';
             const { stdout } = await execFileAsync(cmd, ['markdown-mermaid-converter']);
-            return stdout.trim().split('\n')[0]; // 'where' on Windows may return multiple lines
-        } catch {
-            // Try local build relative to the MCP server
+            return stdout.trim().split('\n')[0];
+        } catch (pathLookupErr) {
+            this.logger.warn(pathLookupErr, 'CLI not found on PATH, trying local build');
             const __dirname = path.dirname(new URL(import.meta.url).pathname);
             const localCli = path.resolve(__dirname, '../../../dist/cli.js');
             try {
@@ -32,36 +47,77 @@ export class MermaidConverter {
         }
     }
 
+    private async runCli(cliArgs: string[]): Promise<CliJsonResult> {
+        const cli = await this.findCli();
+        const args = [...cliArgs, '--json'];
+        const opts = { timeout: 60000, maxBuffer: 10 * 1024 * 1024 };
+
+        let stdout: string;
+        try {
+            const result = cli.endsWith('.js')
+                ? await execFileAsync('node', [cli, ...args], opts)
+                : await execFileAsync(cli, args, opts);
+            stdout = result.stdout;
+        } catch (execErr: any) {
+            // Try to extract structured JSON error from stdout first
+            const rawStdout = execErr?.stdout?.trim() || '';
+            if (rawStdout) {
+                try {
+                    const parsed = JSON.parse(rawStdout);
+                    if (parsed.error) {
+                        throw new Error(`CLI conversion failed: ${parsed.error}`);
+                    }
+                } catch (jsonErr) {
+                    if (jsonErr instanceof Error && jsonErr.message.startsWith('CLI conversion failed:')) {
+                        throw jsonErr;
+                    }
+                }
+            }
+            // Fall back to stderr or generic message
+            const stderr = execErr?.stderr?.trim() || '';
+            const msg = stderr || execErr?.message || String(execErr);
+            throw new Error(`CLI conversion failed: ${msg}`);
+        }
+
+        try {
+            const parsed = JSON.parse(stdout.trim());
+            if (typeof parsed?.fileSize !== 'number' || typeof parsed?.diagramCount !== 'number') {
+                throw new Error(
+                    `CLI returned unexpected JSON structure. Raw stdout: ${stdout.slice(0, 200)}`
+                );
+            }
+            return parsed as CliJsonResult;
+        } catch (parseErr) {
+            if (!(parseErr instanceof SyntaxError)) {
+                throw parseErr;
+            }
+            throw new Error(
+                `CLI produced invalid JSON output (${parseErr.message}). Raw stdout: ${stdout?.slice(0, 200) ?? '<null>'}`
+            );
+        }
+    }
+
     async convertMarkdownToPdf(markdown: string, options: ConversionOptions = {}): Promise<ConversionResult> {
-        const startTime = Date.now();
-        const tempDir = await fs.mkdtemp('/tmp/mcp-mermaid-');
+        const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'mcp-mermaid-'));
 
         try {
             const inputFile = path.join(tempDir, 'input.md');
             const outputFile = path.join(tempDir, 'output.pdf');
             await fs.writeFile(inputFile, markdown, 'utf-8');
 
-            const cli = await this.findCli();
             const cliArgs = [inputFile, '-o', outputFile];
-            if (options.theme) cliArgs.push('-t', options.theme);
-            if (options.pageSize) cliArgs.push('-p', options.pageSize);
+            if (options.theme) { cliArgs.push('-t', options.theme); }
+            if (options.pageSize) { cliArgs.push('-p', options.pageSize); }
 
-            // If CLI is a path to a JS file, run it with node
-            if (cli.endsWith('.js')) {
-                await execFileAsync('node', [cli, ...cliArgs], { timeout: 60000 });
-            } else {
-                await execFileAsync(cli, cliArgs, { timeout: 60000 });
-            }
-
+            const result = await this.runCli(cliArgs);
             const pdfBuffer = await fs.readFile(outputFile);
-            const diagramCount = (markdown.match(/```mermaid\r?\n/g) || []).length;
 
             return {
                 pdfBase64: pdfBuffer.toString('base64'),
                 metadata: {
-                    fileSize: pdfBuffer.length,
-                    diagramCount,
-                    processingTime: Date.now() - startTime,
+                    fileSize: result.fileSize,
+                    diagramCount: result.diagramCount,
+                    processingTime: result.processingTimeMs,
                 },
             };
         } finally {
@@ -80,41 +136,19 @@ export class MermaidConverter {
         const resolvedOutput = outputPath || (
             /\.md$/i.test(inputPath) ? inputPath.replace(/\.md$/i, '.pdf') : inputPath + '.pdf'
         );
-        const cli = await this.findCli();
+
         const cliArgs = [inputPath, '-o', resolvedOutput];
-        if (options.theme) cliArgs.push('-t', options.theme);
-        if (options.pageSize) cliArgs.push('-p', options.pageSize);
+        if (options.theme) { cliArgs.push('-t', options.theme); }
+        if (options.pageSize) { cliArgs.push('-p', options.pageSize); }
 
-        const startTime = Date.now();
-
-        // If CLI is a path to a JS file, run it with node
-        if (cli.endsWith('.js')) {
-            await execFileAsync('node', [cli, ...cliArgs], { timeout: 60000 });
-        } else {
-            await execFileAsync(cli, cliArgs, { timeout: 60000 });
-        }
-
-        let stat;
-        try {
-            stat = await fs.stat(resolvedOutput);
-        } catch (statErr: any) {
-            if (statErr?.code === 'ENOENT') {
-                throw new Error(
-                    `CLI conversion completed but output file was not created at ${resolvedOutput}. ` +
-                    `The CLI tool may have encountered an internal error.`
-                );
-            }
-            throw statErr;
-        }
-        const markdown = await fs.readFile(inputPath, 'utf-8');
-        const diagramCount = (markdown.match(/```mermaid\r?\n/g) || []).length;
+        const result = await this.runCli(cliArgs);
 
         return {
-            outputPath: resolvedOutput,
+            outputPath: result.outputPath,
             metadata: {
-                fileSize: stat.size,
-                diagramCount,
-                processingTime: Date.now() - startTime,
+                fileSize: result.fileSize,
+                diagramCount: result.diagramCount,
+                processingTime: result.processingTimeMs,
             },
         };
     }
