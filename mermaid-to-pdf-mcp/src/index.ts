@@ -151,6 +151,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
+        if (rawOpts.outputPath != null && typeof rawOpts.outputPath !== 'string') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'outputPath must be a string when provided'
+          );
+        }
+
         const validatedOpts = validateOptions(rawOpts);
 
         // Generate a default output path if not provided

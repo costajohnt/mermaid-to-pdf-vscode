@@ -90,10 +90,13 @@ Examples:
         if (inputFile) {
             const resolvedInput = resolve(inputFile);
             if (!outputFile) {
-                outputFile = resolvedInput.replace(/\.md$/i, '.pdf');
+                outputFile = /\.md$/i.test(resolvedInput)
+                    ? resolvedInput.replace(/\.md$/i, '.pdf')
+                    : resolvedInput + '.pdf';
             }
             markdown = await fs.readFile(resolvedInput, 'utf-8');
         } else if (!process.stdin.isTTY) {
+            console.error('Reading from stdin...');
             markdown = await readStdin();
             if (!outputFile) {
                 console.error('Error: --output is required when reading from stdin');
@@ -120,12 +123,25 @@ Examples:
     }
 }
 
-function readStdin(): Promise<string> {
+function readStdin(timeoutMs: number = 30_000): Promise<string> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
+        const timer = setTimeout(() => {
+            reject(new Error(
+                `Timed out after ${timeoutMs / 1000}s waiting for stdin. ` +
+                `Ensure input is piped (e.g., cat file.md | markdown-mermaid-converter -o out.pdf).`
+            ));
+        }, timeoutMs);
+
         process.stdin.on('data', (chunk: Buffer) => chunks.push(chunk));
-        process.stdin.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-        process.stdin.on('error', reject);
+        process.stdin.on('end', () => {
+            clearTimeout(timer);
+            resolve(Buffer.concat(chunks).toString('utf-8'));
+        });
+        process.stdin.on('error', (err) => {
+            clearTimeout(timer);
+            reject(err);
+        });
     });
 }
 

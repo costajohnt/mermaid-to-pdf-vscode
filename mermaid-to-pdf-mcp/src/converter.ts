@@ -54,7 +54,7 @@ export class MermaidConverter {
             }
 
             const pdfBuffer = await fs.readFile(outputFile);
-            const diagramCount = (markdown.match(/```mermaid\n/g) || []).length;
+            const diagramCount = (markdown.match(/```mermaid\r?\n/g) || []).length;
 
             return {
                 pdfBase64: pdfBuffer.toString('base64'),
@@ -77,7 +77,9 @@ export class MermaidConverter {
     }
 
     async convertFileToFile(inputPath: string, outputPath?: string, options: ConversionOptions = {}): Promise<FileConversionResult> {
-        const resolvedOutput = outputPath || inputPath.replace(/\.md$/i, '.pdf');
+        const resolvedOutput = outputPath || (
+            /\.md$/i.test(inputPath) ? inputPath.replace(/\.md$/i, '.pdf') : inputPath + '.pdf'
+        );
         const cli = await this.findCli();
         const cliArgs = [inputPath, '-o', resolvedOutput];
         if (options.theme) cliArgs.push('-t', options.theme);
@@ -92,9 +94,20 @@ export class MermaidConverter {
             await execFileAsync(cli, cliArgs, { timeout: 60000 });
         }
 
-        const stat = await fs.stat(resolvedOutput);
+        let stat;
+        try {
+            stat = await fs.stat(resolvedOutput);
+        } catch (statErr: any) {
+            if (statErr?.code === 'ENOENT') {
+                throw new Error(
+                    `CLI conversion completed but output file was not created at ${resolvedOutput}. ` +
+                    `The CLI tool may have encountered an internal error.`
+                );
+            }
+            throw statErr;
+        }
         const markdown = await fs.readFile(inputPath, 'utf-8');
-        const diagramCount = (markdown.match(/```mermaid\n/g) || []).length;
+        const diagramCount = (markdown.match(/```mermaid\r?\n/g) || []).length;
 
         return {
             outputPath: resolvedOutput,

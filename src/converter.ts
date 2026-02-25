@@ -18,7 +18,7 @@ import {
 const DPI = 96;
 
 /** Mermaid fenced code block pattern */
-const MERMAID_REGEX = /```mermaid\n([\s\S]*?)```/g;
+const MERMAID_REGEX = /```mermaid\r?\n([\s\S]*?)```/g;
 
 // ---------------------------------------------------------------------------
 // Helpers
