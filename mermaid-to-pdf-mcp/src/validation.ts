@@ -14,7 +14,7 @@ const VALID_PAGES = new Set(['A4', 'Letter', 'Legal']);
  * Validate and normalize conversion options from raw MCP input.
  */
 export function validateOptions(raw: unknown): ConversionOptions {
-    if (raw != null && (typeof raw !== 'object' || Array.isArray(raw))) {
+    if (raw !== null && raw !== undefined && (typeof raw !== 'object' || Array.isArray(raw))) {
         throw new McpError(
             ErrorCode.InvalidParams,
             `"options" must be an object, got ${typeof raw}`
@@ -22,15 +22,17 @@ export function validateOptions(raw: unknown): ConversionOptions {
     }
     const obj = (raw ?? {}) as Record<string, unknown>;
     const opts: ConversionOptions = {};
-    if (obj.title != null) opts.title = String(obj.title);
-    if (obj.theme != null) {
-        if (typeof obj.theme !== 'string' || !VALID_THEMES.has(obj.theme))
+    if (obj.title !== null && obj.title !== undefined) { opts.title = String(obj.title); }
+    if (obj.theme !== null && obj.theme !== undefined) {
+        if (typeof obj.theme !== 'string' || !VALID_THEMES.has(obj.theme)) {
             throw new McpError(ErrorCode.InvalidParams, `Invalid theme: ${String(obj.theme)}. Must be "light" or "dark".`);
+        }
         opts.theme = obj.theme as 'light' | 'dark';
     }
-    if (obj.pageSize != null) {
-        if (typeof obj.pageSize !== 'string' || !VALID_PAGES.has(obj.pageSize))
+    if (obj.pageSize !== null && obj.pageSize !== undefined) {
+        if (typeof obj.pageSize !== 'string' || !VALID_PAGES.has(obj.pageSize)) {
             throw new McpError(ErrorCode.InvalidParams, `Invalid pageSize: ${String(obj.pageSize)}. Must be "A4", "Letter", or "Legal".`);
+        }
         opts.pageSize = obj.pageSize as 'A4' | 'Letter' | 'Legal';
     }
     return opts;

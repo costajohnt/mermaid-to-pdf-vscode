@@ -187,8 +187,8 @@ function readStdin(timeoutMs: number = 30_000): Promise<string> {
 }
 
 // Only auto-run when this module is the direct entry point
-const __filename = fileURLToPath(import.meta.url);
-if (process.argv[1] === __filename) {
+const currentFilePath = fileURLToPath(import.meta.url);
+if (process.argv[1] === currentFilePath) {
     main().catch(err => {
         console.error(err);
         process.exit(1);

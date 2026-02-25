@@ -10,4 +10,4 @@ export type {
     PageDimensions,
     CliJsonOutput,
 } from './types.js';
-export { DEFAULT_OPTIONS, PAGE_DIMENSIONS, MIN_SCALE } from './types.js';
+export { DEFAULT_OPTIONS, PAGE_DIMENSIONS, MIN_SCALE, RENDER_TIMEOUT, PDF_TIMEOUT, VALID_THEMES, VALID_PAGE_SIZES } from './types.js';

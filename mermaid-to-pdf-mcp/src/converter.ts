@@ -7,6 +7,13 @@ import { ConversionOptions, ConversionResult, FileConversionResult } from './typ
 
 const execFileAsync = promisify(execFile);
 
+/** Shape of the error thrown by execFile when the child process fails. */
+interface ExecFileError extends Error {
+    stdout?: string;
+    stderr?: string;
+    code?: number | string;
+}
+
 interface CliJsonResult {
     outputPath: string;
     fileSize: number;
@@ -31,15 +38,18 @@ export class MermaidConverter {
             return stdout.trim().split('\n')[0];
         } catch (pathLookupErr) {
             this.logger.warn(pathLookupErr, 'CLI not found on PATH, trying local build');
-            const __dirname = path.dirname(new URL(import.meta.url).pathname);
-            const localCli = path.resolve(__dirname, '../../../dist/cli.js');
+            const currentDir = path.dirname(new URL(import.meta.url).pathname);
+            const localCli = path.resolve(currentDir, '../../../dist/cli.js');
             try {
                 await fs.access(localCli);
                 return localCli;
-            } catch (accessErr: any) {
-                const detail = accessErr?.code === 'ENOENT'
+            } catch (accessErr: unknown) {
+                const errCode = accessErr instanceof Error && 'code' in accessErr
+                    ? (accessErr as NodeJS.ErrnoException).code
+                    : undefined;
+                const detail = errCode === 'ENOENT'
                     ? 'file does not exist'
-                    : `access check failed: ${accessErr?.message || String(accessErr)}`;
+                    : `access check failed: ${accessErr instanceof Error ? accessErr.message : String(accessErr)}`;
                 throw new Error(
                     `CLI tool not found. Checked PATH and ${localCli} (${detail}). Install globally or build the CLI package.`
                 );
@@ -58,24 +68,25 @@ export class MermaidConverter {
                 ? await execFileAsync('node', [cli, ...args], opts)
                 : await execFileAsync(cli, args, opts);
             stdout = result.stdout;
-        } catch (execErr: any) {
+        } catch (execErr: unknown) {
             // Try to extract structured JSON error from stdout first
-            const rawStdout = execErr?.stdout?.trim() || '';
+            const execError = execErr as ExecFileError;
+            const rawStdout = execError.stdout?.trim() || '';
             if (rawStdout) {
                 try {
                     const parsed = JSON.parse(rawStdout);
                     if (parsed.error) {
                         throw new Error(`CLI conversion failed: ${parsed.error}`);
                     }
-                } catch (jsonErr) {
+                } catch (jsonErr: unknown) {
                     if (jsonErr instanceof Error && jsonErr.message.startsWith('CLI conversion failed:')) {
                         throw jsonErr;
                     }
                 }
             }
             // Fall back to stderr or generic message
-            const stderr = execErr?.stderr?.trim() || '';
-            const msg = stderr || execErr?.message || String(execErr);
+            const stderr = execError.stderr?.trim() || '';
+            const msg = stderr || (execErr instanceof Error ? execErr.message : String(execErr));
             throw new Error(`CLI conversion failed: ${msg}`);
         }
 

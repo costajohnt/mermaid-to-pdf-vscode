@@ -40,6 +40,12 @@ export const PAGE_DIMENSIONS = {
     'Legal': { widthMm: 215.9, heightMm: 355.6 },
 } as const satisfies Record<PageSize, { widthMm: number; heightMm: number }>;
 
+/** Valid theme values for runtime validation */
+export const VALID_THEMES = ['light', 'dark'] as const;
+
+/** Valid page size values for runtime validation */
+export const VALID_PAGE_SIZES = ['A4', 'Letter', 'Legal'] as const;
+
 export const DEFAULT_OPTIONS: ConversionOptions = Object.freeze({
     theme: 'light' as const,
     pageSize: 'A4' as const,
@@ -48,6 +54,12 @@ export const DEFAULT_OPTIONS: ConversionOptions = Object.freeze({
 
 /** Minimum scale factor before we allow vertical overflow rather than shrinking further */
 export const MIN_SCALE = 0.6;
+
+/** Timeout in ms for Mermaid diagram rendering operations */
+export const RENDER_TIMEOUT = 30_000;
+
+/** Timeout in ms for PDF generation (page.pdf()) to prevent indefinite hangs */
+export const PDF_TIMEOUT = 60_000;
 
 /**
  * Shape of the CLI's --json stdout output.

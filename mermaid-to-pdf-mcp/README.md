@@ -43,22 +43,63 @@ npm link
 
 ## MCP Server Configuration
 
-### For Claude Code
+### For Claude Desktop
 
-Add to your Claude Code settings (`.claude/settings.json`):
+Add to your Claude Desktop config (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "markdown-mermaid-converter": {
       "command": "markdown-mermaid-converter-mcp",
-      "description": "Convert Markdown with Mermaid diagrams to PDF"
+      "args": []
     }
   }
 }
 ```
 
-Then restart Claude Code to load the MCP server.
+Then restart Claude Desktop.
+
+### For Claude Code
+
+Use Claude Code's built-in MCP management to add the server:
+
+**Option A: User scope (available across all projects):**
+```bash
+claude mcp add --scope user markdown-mermaid-converter markdown-mermaid-converter-mcp
+```
+
+**Option B: Project scope (for a specific project, creates `.mcp.json`):**
+```bash
+# Navigate to your project directory first
+claude mcp add --scope project markdown-mermaid-converter markdown-mermaid-converter-mcp
+```
+
+**Option C: Local scope (private to you in current project):**
+```bash
+# Navigate to your project directory first
+claude mcp add --scope local markdown-mermaid-converter markdown-mermaid-converter-mcp
+```
+
+Verify the server is configured:
+```bash
+claude mcp list
+```
+
+**Alternative: Manual Configuration**
+
+You can also create a `.mcp.json` file in your project root:
+
+```json
+{
+  "mcpServers": {
+    "markdown-mermaid-converter": {
+      "command": "markdown-mermaid-converter-mcp",
+      "args": []
+    }
+  }
+}
+```
 
 ### For Other MCP Clients
 

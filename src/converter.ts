@@ -11,6 +11,9 @@ import {
     PageDimensions,
     RenderedDiagram,
     MIN_SCALE,
+    PDF_TIMEOUT,
+    VALID_THEMES,
+    VALID_PAGE_SIZES,
     getBrowserArgs,
 } from './types.js';
 
@@ -379,6 +382,22 @@ export class Converter {
     private cache: DiagramCache;
 
     constructor(options: Partial<ConversionOptions> = {}) {
+        // Validate theme if provided
+        if (options.theme !== undefined &&
+            !(VALID_THEMES as readonly string[]).includes(options.theme)) {
+            throw new Error(
+                `Invalid theme "${options.theme}". Must be one of: ${VALID_THEMES.join(', ')}.`
+            );
+        }
+
+        // Validate pageSize if provided
+        if (options.pageSize !== undefined &&
+            !(VALID_PAGE_SIZES as readonly string[]).includes(options.pageSize)) {
+            throw new Error(
+                `Invalid pageSize "${options.pageSize}". Must be one of: ${VALID_PAGE_SIZES.join(', ')}.`
+            );
+        }
+
         this.options = {
             ...DEFAULT_OPTIONS,
             ...options,
@@ -457,7 +476,7 @@ export class Converter {
 
                 // Width-first scaling
                 let scale = Math.min(dims.contentWidth / rendered.width, 1.0); // never upscale
-                if (scale < MIN_SCALE) scale = MIN_SCALE; // readability floor
+                if (scale < MIN_SCALE) { scale = MIN_SCALE; } // readability floor
 
                 const displayWidth  = Math.round(rendered.width  * scale);
                 const displayHeight = Math.round(rendered.height * scale);
@@ -521,7 +540,7 @@ export class Converter {
                 ),
             );
 
-            const pdfUint8 = await page.pdf({
+            const pdfPromise = page.pdf({
                 format: this.options.pageSize,
                 printBackground: true,
                 margin: {
@@ -532,7 +551,23 @@ export class Converter {
                 },
             });
 
-            return Buffer.from(pdfUint8);
+            let timer: ReturnType<typeof setTimeout>;
+            const timeoutPromise = new Promise<never>((_resolve, reject) => {
+                timer = setTimeout(
+                    () => reject(new Error(
+                        `PDF generation timed out after ${PDF_TIMEOUT / 1000} seconds. ` +
+                        `The document may be too large or complex.`
+                    )),
+                    PDF_TIMEOUT,
+                );
+            });
+
+            try {
+                const pdfUint8 = await Promise.race([pdfPromise, timeoutPromise]);
+                return Buffer.from(pdfUint8);
+            } finally {
+                clearTimeout(timer!);
+            }
         } finally {
             try {
                 await page.close();

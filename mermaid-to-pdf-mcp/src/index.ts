@@ -135,7 +135,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
-        if (rawOpts.outputPath != null && typeof rawOpts.outputPath !== 'string') {
+        if (rawOpts.outputPath !== null && rawOpts.outputPath !== undefined && typeof rawOpts.outputPath !== 'string') {
           throw new McpError(
             ErrorCode.InvalidParams,
             'outputPath must be a string when provided'
@@ -211,7 +211,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
-        if (outputPath != null && typeof outputPath !== 'string') {
+        if (outputPath !== null && outputPath !== undefined && typeof outputPath !== 'string') {
           throw new McpError(
             ErrorCode.InvalidParams,
             'outputPath must be a string when provided'
@@ -219,7 +219,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const validatedInputPath = validatePath(inputPath, 'inputPath');
-        const validatedOutputPath = outputPath != null
+        const validatedOutputPath = outputPath !== null && outputPath !== undefined
           ? validatePath(outputPath, 'outputPath')
           : undefined;
 
@@ -262,7 +262,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 let isCleaningUp = false;
 
 async function cleanup() {
-  if (isCleaningUp) return;
+  if (isCleaningUp) { return; }
   isCleaningUp = true;
   try {
     await converter.cleanup();

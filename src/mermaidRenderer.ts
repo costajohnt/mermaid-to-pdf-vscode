@@ -3,13 +3,11 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { RenderedDiagram } from './types.js';
-import { getBrowserArgs } from './types.js';
+import { getBrowserArgs, RENDER_TIMEOUT } from './types.js';
 
 // Module-level browser singleton (lazy-init)
 let browserInstance: Browser | null = null;
 let browserLaunchPromise: Promise<Browser> | null = null;
-
-const RENDER_TIMEOUT = 30_000;
 const PADDING = 10;
 
 /**
@@ -65,10 +63,10 @@ export async function closeBrowser(): Promise<void> {
 let _mermaidScriptCache: string | null = null;
 
 function loadMermaidScript(): string {
-    if (_mermaidScriptCache) return _mermaidScriptCache;
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const mermaidPath = resolve(__dirname, 'vendor', 'mermaid.min.js');
+    if (_mermaidScriptCache) { return _mermaidScriptCache; }
+    const currentFile = fileURLToPath(import.meta.url);
+    const currentDir = dirname(currentFile);
+    const mermaidPath = resolve(currentDir, 'vendor', 'mermaid.min.js');
     try {
         _mermaidScriptCache = readFileSync(mermaidPath, 'utf-8');
     } catch (err) {
