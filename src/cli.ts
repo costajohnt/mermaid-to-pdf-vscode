@@ -1,106 +1,113 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'fs';
-import { resolve, basename } from 'path';
-import { FinalMermaidToPdfConverter } from './finalConverter.js';
-import { BrowserPool } from './browserPool.js';
+import { resolve } from 'path';
+import { promises as fs } from 'fs';
+import { fileURLToPath } from 'url';
+import { Converter } from './converter.js';
+import { closeBrowser } from './mermaidRenderer.js';
 
-async function main() {
-    const args = process.argv.slice(2);
-    
-    if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+export async function main(argv: string[] = process.argv.slice(2)) {
+    if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
         console.log(`
-Markdown Mermaid Converter CLI Tool
+markdown-mermaid-converter — Convert Markdown with Mermaid diagrams to PDF
 
 Usage:
   markdown-mermaid-converter <input.md> [options]
+  cat input.md | markdown-mermaid-converter -o output.pdf
 
 Options:
-  -o, --output <file>    Output PDF file path (default: input.pdf)
-  -t, --theme <theme>    Mermaid theme (default: light)
-  -q, --quality <level>  PDF quality: draft, standard, high (default: high)
-  -p, --page <size>      Page size: A4, Letter, Legal (default: A4)
+  -o, --output <file>   Output PDF file path (default: <input>.pdf)
+  -t, --theme <theme>   light | dark (default: light)
+  -p, --page <size>     A4 | Letter | Legal (default: A4)
   -h, --help            Show this help message
 
 Examples:
   markdown-mermaid-converter document.md
-  markdown-mermaid-converter document.md -o output.pdf -t dark -q high
-        `);
+  markdown-mermaid-converter document.md -o output.pdf -t dark
+  cat README.md | markdown-mermaid-converter -o readme.pdf
+`);
         process.exit(0);
     }
 
-    const inputFile = args[0];
-    if (!inputFile) {
-        console.error('Error: Input file is required');
-        process.exit(1);
-    }
+    // Parse arguments
+    let inputFile: string | null = null;
+    let outputFile: string | null = null;
+    let theme: 'light' | 'dark' = 'light';
+    let pageSize: 'A4' | 'Letter' | 'Legal' = 'A4';
 
-    // Parse options
-    let outputFile = inputFile.replace(/\.md$/, '.pdf');
-    let theme = 'light';
-    let quality = 'high';
-    let pageSize = 'A4';
-
-    for (let i = 1; i < args.length; i++) {
-        const arg = args[i];
-        switch (arg) {
+    for (let i = 0; i < argv.length; i++) {
+        switch (argv[i]) {
             case '-o':
             case '--output':
-                outputFile = args[++i];
+                outputFile = argv[++i];
                 break;
             case '-t':
             case '--theme':
-                theme = args[++i];
-                break;
-            case '-q':
-            case '--quality':
-                quality = args[++i];
+                theme = argv[++i] as 'light' | 'dark';
                 break;
             case '-p':
             case '--page':
-                pageSize = args[++i];
+                pageSize = argv[++i] as 'A4' | 'Letter' | 'Legal';
+                break;
+            default:
+                if (!argv[i].startsWith('-')) {
+                    inputFile = argv[i];
+                }
                 break;
         }
     }
 
     try {
-        console.log(`Converting ${inputFile} to PDF...`);
-        
-        const converter = new FinalMermaidToPdfConverter({
-            engine: 'puppeteer',
-            quality: quality as 'draft' | 'standard' | 'high',
-            theme: theme as 'light' | 'dark',
-            pageSize: pageSize as 'A4' | 'Letter' | 'Legal'
-        });
+        const converter = new Converter({ theme, pageSize });
+        let markdown: string;
 
-        const result = await converter.convert(resolve(inputFile), (message: string, increment: number) => {
-            console.log(`[${increment}%] ${message}`);
-        });
-
-        console.log(`✅ PDF created successfully: ${result}`);
-        
-        // Clean up browser pool to prevent hanging processes
-        const browserPool = BrowserPool.getInstance();
-        await browserPool.destroy();
-        
-        // Explicitly exit with success to prevent hanging
-        process.exit(0);
-        
-    } catch (error) {
-        console.error('❌ Conversion failed:', error);
-        
-        // Clean up browser pool even on error
-        try {
-            const browserPool = BrowserPool.getInstance();
-            await browserPool.destroy();
-        } catch (cleanupError) {
-            // Ignore cleanup errors
+        if (inputFile) {
+            const resolvedInput = resolve(inputFile);
+            if (!outputFile) {
+                outputFile = resolvedInput.replace(/\.md$/i, '.pdf');
+            }
+            markdown = await fs.readFile(resolvedInput, 'utf-8');
+        } else if (!process.stdin.isTTY) {
+            markdown = await readStdin();
+            if (!outputFile) {
+                console.error('Error: --output is required when reading from stdin');
+                process.exit(1);
+            }
+        } else {
+            console.error('Error: No input file specified. Use --help for usage.');
+            process.exit(1);
+            return;
         }
-        
+
+        const resolvedOutput = resolve(outputFile!);
+        console.error(`Converting to ${resolvedOutput}...`);
+
+        const pdfBuffer = await converter.convertString(markdown);
+        await fs.writeFile(resolvedOutput, pdfBuffer);
+
+        console.error(`Done. ${(pdfBuffer.length / 1024).toFixed(1)} KB written.`);
+    } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
+    } finally {
+        await closeBrowser();
     }
 }
 
-main().catch(console.error);
+function readStdin(): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        process.stdin.on('data', (chunk: Buffer) => chunks.push(chunk));
+        process.stdin.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+        process.stdin.on('error', reject);
+    });
+}
 
-export { main };
+// Only auto-run when this module is the direct entry point
+const __filename = fileURLToPath(import.meta.url);
+if (process.argv[1] === __filename) {
+    main().catch(err => {
+        console.error(err);
+        process.exit(1);
+    });
+}
