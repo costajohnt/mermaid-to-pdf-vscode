@@ -11,8 +11,9 @@ export class MermaidConverter {
 
     private async findCli(): Promise<string> {
         try {
-            const { stdout } = await execFileAsync('which', ['markdown-mermaid-converter']);
-            return stdout.trim();
+            const cmd = process.platform === 'win32' ? 'where' : 'which';
+            const { stdout } = await execFileAsync(cmd, ['markdown-mermaid-converter']);
+            return stdout.trim().split('\n')[0]; // 'where' on Windows may return multiple lines
         } catch {
             // Try local build relative to the MCP server
             const __dirname = path.dirname(new URL(import.meta.url).pathname);
@@ -20,8 +21,13 @@ export class MermaidConverter {
             try {
                 await fs.access(localCli);
                 return localCli;
-            } catch {
-                throw new Error('CLI tool not found. Install globally or build the CLI package.');
+            } catch (accessErr: any) {
+                const detail = accessErr?.code === 'ENOENT'
+                    ? 'file does not exist'
+                    : `access check failed: ${accessErr?.message || String(accessErr)}`;
+                throw new Error(
+                    `CLI tool not found. Checked PATH and ${localCli} (${detail}). Install globally or build the CLI package.`
+                );
             }
         }
     }

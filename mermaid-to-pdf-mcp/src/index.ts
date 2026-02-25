@@ -9,6 +9,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { MermaidConverter } from './converter.js';
 import { ConversionOptions } from './types.js';
+import { homedir } from 'os';
+import path from 'path';
 
 // Silent logger - only log errors to avoid MCP noise
 const logger = {
@@ -34,6 +36,26 @@ const server = new Server(
     },
   }
 );
+
+// Option validation
+const VALID_THEMES = new Set(['light', 'dark']);
+const VALID_PAGES = new Set(['A4', 'Letter', 'Legal']);
+
+function validateOptions(raw: Record<string, unknown>): ConversionOptions {
+    const opts: ConversionOptions = {};
+    if (raw.title != null) opts.title = String(raw.title);
+    if (raw.theme != null) {
+        if (!VALID_THEMES.has(raw.theme as string))
+            throw new McpError(ErrorCode.InvalidParams, `Invalid theme: ${raw.theme}. Must be "light" or "dark".`);
+        opts.theme = raw.theme as 'light' | 'dark';
+    }
+    if (raw.pageSize != null) {
+        if (!VALID_PAGES.has(raw.pageSize as string))
+            throw new McpError(ErrorCode.InvalidParams, `Invalid pageSize: ${raw.pageSize}. Must be "A4", "Letter", or "Legal".`);
+        opts.pageSize = raw.pageSize as 'A4' | 'Letter' | 'Legal';
+    }
+    return opts;
+}
 
 // Tool definitions
 const TOOLS = {
@@ -113,7 +135,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'convert_markdown_to_pdf': {
-        const { markdown, options = {} } = args as any;
+        const { markdown, options: rawOpts = {} } = args as any;
 
         if (!markdown || typeof markdown !== 'string') {
           throw new McpError(
@@ -122,13 +144,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
-        // Generate a default output path if not provided
-        const title = options.title || 'Document';
-        const safeTitle = title.replace(/[^a-zA-Z0-9\-_]/g, '_');
-        const defaultPath = `${process.env.HOME}/Desktop/${safeTitle}.pdf`;
-        const outputPath = options.outputPath || defaultPath;
+        const validatedOpts = validateOptions(rawOpts);
 
-        const result = await converter.convertFileToFileFromContent(markdown, outputPath, options as ConversionOptions);
+        // Generate a default output path if not provided
+        const title = rawOpts.title || 'Document';
+        const safeTitle = title.replace(/[^a-zA-Z0-9\-_]/g, '_');
+        const defaultPath = path.join(homedir(), 'Desktop', `${safeTitle}.pdf`);
+        const outputPath = rawOpts.outputPath || defaultPath;
+
+        const result = await converter.convertFileToFileFromContent(markdown, outputPath, validatedOpts);
 
         return {
           content: [
@@ -145,7 +169,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'convert_markdown_to_pdf_data': {
-        const { markdown, options = {} } = args as any;
+        const { markdown, options: rawOpts = {} } = args as any;
 
         if (!markdown || typeof markdown !== 'string') {
           throw new McpError(
@@ -154,7 +178,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
-        const result = await converter.convertMarkdownToPdf(markdown, options as ConversionOptions);
+        const validatedOpts = validateOptions(rawOpts);
+        const result = await converter.convertMarkdownToPdf(markdown, validatedOpts);
 
         const response: any = {
           pdf: result.pdfBase64,
@@ -177,7 +202,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'convert_markdown_file_to_pdf': {
-        const { inputPath, outputPath, options = {} } = args as any;
+        const { inputPath, outputPath, options: rawOpts = {} } = args as any;
 
         if (!inputPath || typeof inputPath !== 'string') {
           throw new McpError(
@@ -186,7 +211,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
-        const result = await converter.convertFileToFile(inputPath, outputPath, options as ConversionOptions);
+        const validatedOpts = validateOptions(rawOpts);
+        const result = await converter.convertFileToFile(inputPath, outputPath, validatedOpts);
 
         return {
           content: [
@@ -220,20 +246,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Cleanup on exit
+// Cleanup on signal (do NOT register on 'exit' -- async work cannot complete in that handler)
+let isCleaningUp = false;
+
 async function cleanup() {
+  if (isCleaningUp) return;
+  isCleaningUp = true;
   try {
     await converter.cleanup();
   } catch (error) {
     logger.error(error, 'Final cleanup failed');
   }
-
   process.exit(0);
 }
 
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
-process.on('exit', cleanup);
 
 // Start the server
 async function main() {

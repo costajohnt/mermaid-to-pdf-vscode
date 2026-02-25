@@ -74,9 +74,21 @@ function computePageDimensions(options: ConversionOptions): PageDimensions {
  */
 function resizeSvg(svgString: string, displayWidth: number, displayHeight: number): string {
     let svg = svgString;
-    // Update width and height but preserve the renderer's viewBox
-    svg = svg.replace(/(<svg[^>]*?)\bwidth="[^"]*"/, `$1width="${displayWidth}"`);
-    svg = svg.replace(/(<svg[^>]*?)\bheight="[^"]*"/, `$1height="${displayHeight}"`);
+    const widthPattern = /(<svg[^>]*?)\bwidth="[^"]*"/;
+    const heightPattern = /(<svg[^>]*?)\bheight="[^"]*"/;
+
+    if (!widthPattern.test(svg)) {
+        console.error('Warning: SVG has no width attribute to resize. Diagram may render at wrong size.');
+    } else {
+        svg = svg.replace(widthPattern, `$1width="${displayWidth}"`);
+    }
+
+    if (!heightPattern.test(svg)) {
+        console.error('Warning: SVG has no height attribute to resize. Diagram may render at wrong size.');
+    } else {
+        svg = svg.replace(heightPattern, `$1height="${displayHeight}"`);
+    }
+
     return svg;
 }
 
@@ -315,11 +327,21 @@ export class Converter {
     private cache: DiagramCache;
 
     constructor(options: Partial<ConversionOptions> = {}) {
-        this.options = { ...DEFAULT_OPTIONS, ...options };
-        // Merge margins separately so partial margin objects don't drop fields
-        if (options.margins) {
-            this.options.margins = { ...DEFAULT_OPTIONS.margins, ...options.margins };
+        this.options = {
+            ...DEFAULT_OPTIONS,
+            ...options,
+            margins: { ...DEFAULT_OPTIONS.margins, ...(options.margins ?? {}) },
+        };
+
+        // Validate margin format eagerly
+        for (const [side, value] of Object.entries(this.options.margins)) {
+            if (!/^\d+(?:\.\d+)?(mm|cm|in|px)$/.test(value.trim())) {
+                throw new Error(
+                    `Invalid margin "${side}": "${value}". Expected a number with unit (mm, cm, in, px).`
+                );
+            }
         }
+
         this.cache = new DiagramCache();
     }
 
@@ -361,18 +383,24 @@ export class Converter {
         let diagramCount = 0;
 
         // 2. Render each diagram to SVG and replace in markdown
+        //    Process matches in reverse index order so that splicing doesn't
+        //    shift the positions of earlier matches. This also correctly handles
+        //    duplicate mermaid code blocks (string.replace would only hit the first).
         let processed = markdown;
-        for (const match of matches) {
+        const mermaidTheme = this.options.theme === 'dark' ? 'dark' : 'default';
+        for (let i = matches.length - 1; i >= 0; i--) {
+            const match = matches[i];
             const fullMatch = match[0];
             const mermaidCode = match[1].trim();
+            const start = match.index!;
+            const end = start + fullMatch.length;
 
             try {
-                // Check cache first
-                let rendered: RenderedDiagram | null = this.cache.get(mermaidCode);
+                // Check cache first (keyed by code + theme)
+                let rendered: RenderedDiagram | null = this.cache.get(mermaidCode, mermaidTheme);
                 if (!rendered) {
-                    const mermaidTheme = this.options.theme === 'dark' ? 'dark' : 'default';
                     rendered = await renderMermaidToSvg(mermaidCode, mermaidTheme);
-                    this.cache.set(mermaidCode, rendered);
+                    this.cache.set(mermaidCode, rendered, mermaidTheme);
                 }
 
                 // Width-first scaling
@@ -394,7 +422,7 @@ export class Converter {
                 );
 
                 const replacement = `<div class="mermaid-diagram${breakClass}">${sized}</div>`;
-                processed = processed.replace(fullMatch, replacement);
+                processed = processed.slice(0, start) + replacement + processed.slice(end);
                 diagramCount++;
             } catch (err) {
                 // Render failure: embed error box and continue
@@ -407,7 +435,7 @@ export class Converter {
                     `  <p><em>Error: ${escapeHtml(message)}</em></p>`,
                     '</div>',
                 ].join('\n');
-                processed = processed.replace(fullMatch, errorBox);
+                processed = processed.slice(0, start) + errorBox + processed.slice(end);
             }
         }
 

@@ -49,7 +49,15 @@ function loadMermaidScript(): string {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
     const mermaidPath = resolve(__dirname, 'vendor', 'mermaid.min.js');
-    _mermaidScriptCache = readFileSync(mermaidPath, 'utf-8');
+    try {
+        _mermaidScriptCache = readFileSync(mermaidPath, 'utf-8');
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(
+            `Failed to load vendored mermaid.min.js at ${mermaidPath}: ${msg}. ` +
+            `This file should be included in the package. Try reinstalling or rebuilding.`
+        );
+    }
     return _mermaidScriptCache;
 }
 
@@ -107,7 +115,7 @@ export async function renderMermaidToSvg(
                 mermaid.initialize({
                     startOnLoad: false,
                     theme: mermaidTheme,
-                    securityLevel: 'loose',
+                    securityLevel: 'strict',
                     logLevel: 'error',
                     flowchart: { useMaxWidth: false },
                     sequence: { useMaxWidth: false },

@@ -30,22 +30,17 @@ export interface PageDimensions {
     contentHeight: number;
 }
 
-export const PAGE_DIMENSIONS: Record<PageSize, { widthMm: number; heightMm: number }> = {
+export const PAGE_DIMENSIONS = {
     'A4': { widthMm: 210, heightMm: 297 },
     'Letter': { widthMm: 215.9, heightMm: 279.4 },
     'Legal': { widthMm: 215.9, heightMm: 355.6 },
-};
+} as const satisfies Record<PageSize, { widthMm: number; heightMm: number }>;
 
-export const DEFAULT_OPTIONS: ConversionOptions = {
-    theme: 'light',
-    pageSize: 'A4',
-    margins: {
-        top: '15mm',
-        right: '15mm',
-        bottom: '15mm',
-        left: '15mm',
-    },
-};
+export const DEFAULT_OPTIONS: ConversionOptions = Object.freeze({
+    theme: 'light' as const,
+    pageSize: 'A4' as const,
+    margins: Object.freeze({ top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }),
+});
 
 /** Minimum scale factor before we allow vertical overflow rather than shrinking further */
 export const MIN_SCALE = 0.6;
