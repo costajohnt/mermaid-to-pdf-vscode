@@ -1,6 +1,6 @@
 # Markdown Mermaid Converter
 
-Transform your ideas into professional documents with beautiful diagrams - just by asking for them. Convert Markdown with Mermaid diagrams to various formats including PDF.
+Transform your ideas into professional documents with beautiful diagrams - just by asking for them. Convert Markdown with Mermaid diagrams to PDF.
 
 ![MCP Server](https://img.shields.io/badge/MCP-Server-purple)
 ![CLI Tool](https://img.shields.io/badge/CLI-Tool-blue)
@@ -125,7 +125,13 @@ npm install -g markdown-mermaid-converter-cli
 markdown-mermaid-converter your-document.md
 
 # With custom options
-markdown-mermaid-converter document.md -o output.pdf -t dark -q high
+markdown-mermaid-converter document.md -o output.pdf -t dark -p Letter
+
+# JSON output for scripting
+markdown-mermaid-converter document.md --json
+
+# Read from stdin
+cat document.md | markdown-mermaid-converter -o output.pdf
 ```
 
 ### CLI Options
@@ -134,10 +140,10 @@ markdown-mermaid-converter document.md -o output.pdf -t dark -q high
 Usage: markdown-mermaid-converter <input.md> [options]
 
 Options:
-  -o, --output <file>    Output PDF file path (default: input.pdf)
-  -t, --theme <theme>    Mermaid theme (default: light)
-  -q, --quality <level>  PDF quality: draft, standard, high (default: high)
-  -p, --page <size>      Page size: A4, Letter, Legal (default: A4)
+  -o, --output <file>   Output PDF file path (default: <input>.pdf)
+  -t, --theme <theme>   light | dark (default: light)
+  -p, --page <size>     A4 | Letter | Legal (default: A4)
+  --json                Output results as JSON to stdout
   -h, --help            Show this help message
 ```
 
@@ -147,9 +153,9 @@ Options:
 
 ### What You Get
 - 📄 **Professional PDFs**: Clean typography and proper formatting
-- 🎨 **Crisp Diagrams**: High-resolution rendering (2x scale factor)
+- 🎨 **Crisp Diagrams**: SVG-first rendering with measured layout
 - ⚡ **Fast Performance**: Browser pooling and diagram caching
-- 🔧 **Configurable**: Custom themes, quality levels, and page sizes
+- 🔧 **Configurable**: Custom themes and page sizes
 - 🛡️ **Reliable**: Comprehensive error handling and validation
 
 ### Supported Diagram Types
@@ -244,7 +250,7 @@ erDiagram
 ### With CLI
 Create `architecture.md` with your content, then:
 ```bash
-mermaid-to-pdf architecture.md -q high -t light
+markdown-mermaid-converter architecture.md -o architecture.pdf -t light
 ```
 
 ---

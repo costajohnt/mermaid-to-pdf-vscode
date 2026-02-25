@@ -55,6 +55,13 @@ jobs:
         NODE_ENV: test
       timeout-minutes: 5
 
+    - name: Build MCP server
+      run: cd mermaid-to-pdf-mcp && npm install && npm run build
+
+    - name: Run MCP server tests
+      run: cd mermaid-to-pdf-mcp && npm test
+      timeout-minutes: 2
+
     - name: Generate test report
       if: always()
       run: |
