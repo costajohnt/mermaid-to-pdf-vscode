@@ -67,22 +67,24 @@ The converter transforms Markdown to PDF through a multi-stage pipeline. The fol
 
 ```mermaid
 flowchart LR
-    A["Markdown\nInput"] --> B["marked\nparser"]
-    B --> C["Extract Mermaid\nblocks"]
-    C --> D["Puppeteer +\nmermaid.js"]
-    D --> E["SVG +\ngetBBox()"]
-    E --> F["Sized HTML\ndocument"]
-    F --> G["page.pdf()"]
-    G --> H["PDF\nOutput"]
+    A["Markdown\nInput"] --> B["Regex\nextract"]
+    B --> C["Puppeteer +\nmermaid.js"]
+    C --> D["SVG +\ngetBBox()"]
+    D --> E["Scale +\nreplace"]
+    E --> F["marked\nparser"]
+    F --> G["Post-\nprocess"]
+    G --> H["page.pdf()"]
+    H --> I["PDF\nOutput"]
 ```
 
 **Pipeline stages:**
 
-1. **Parse** -- Markdown is split into text blocks and fenced Mermaid code blocks using a regex pattern.
+1. **Extract** -- Mermaid fenced code blocks are extracted from the raw Markdown via regex.
 2. **Render** -- Each Mermaid block is rendered to SVG in a headless Chromium page (via Puppeteer) using a locally bundled `mermaid.min.js` (no CDN dependency). Exact dimensions are extracted via `getBBox()`.
-3. **Scale** -- SVGs are scaled to fit page width (never upscaled). Tall diagrams overflow across pages.
-4. **Assemble** -- Sized SVGs are embedded in a styled HTML document. Headings are absorbed into diagram containers to prevent orphaning during PDF page breaks.
-5. **PDF** -- A second Puppeteer browser instance generates the final PDF via `page.pdf()`.
+3. **Scale and Replace** -- SVGs are scaled to fit page width (never upscaled). The fenced code blocks in the raw Markdown are replaced with sized `<div>` elements containing the SVGs.
+4. **Parse** -- The processed Markdown (now containing embedded SVG divs) is converted to HTML via `marked` (GFM mode).
+5. **Post-process** -- Headings that immediately precede diagram containers are absorbed into the container to prevent orphaning during PDF page breaks.
+6. **PDF** -- A second Puppeteer browser instance generates the final PDF via `page.pdf()`.
 
 ### Module Responsibility Map
 
@@ -94,7 +96,7 @@ flowchart LR
 | `src/diagramCache.ts` | Diagram caching -- simple in-memory cache keyed by mermaid code + theme, avoids re-rendering duplicate diagrams |
 | `src/types.ts` | Shared types and constants -- `ConversionOptions`, `PageSize`, `RenderedDiagram`, defaults, validation constants, `CliJsonOutput` interface |
 | `src/vendor/mermaid.min.js` | Bundled Mermaid IIFE (v11.x) -- copied from `node_modules` by postinstall script, no network dependency at runtime |
-| `mermaid-to-pdf-mcp/` | MCP server -- thin wrapper that shells out to the CLI binary, exposes `convert_markdown_to_pdf` tool |
+| `mermaid-to-pdf-mcp/` | MCP server -- thin wrapper that shells out to the CLI binary, exposes `convert_markdown_to_pdf` and `convert_markdown_to_pdf_data` tools |
 
 ## Submitting a Pull Request
 

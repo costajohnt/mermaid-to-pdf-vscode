@@ -1,5 +1,5 @@
 [![CI](https://github.com/costajohnt/mermaid-to-pdf-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/costajohnt/mermaid-to-pdf-vscode/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/markdown-mermaid-converter)](https://www.npmjs.com/package/markdown-mermaid-converter)
+[![npm version](https://img.shields.io/npm/v/markdown-mermaid-converter-cli)](https://www.npmjs.com/package/markdown-mermaid-converter-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # Markdown Mermaid Converter
@@ -154,7 +154,7 @@ Options:
 You can use the converter as a library in your own Node.js / TypeScript projects:
 
 ```typescript
-import { Converter } from 'markdown-mermaid-converter-cli/converter';
+import { Converter } from 'markdown-mermaid-converter-cli';
 
 const converter = new Converter({
   theme: 'light',       // 'light' | 'dark' (default: 'light')
