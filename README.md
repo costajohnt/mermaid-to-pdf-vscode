@@ -1,11 +1,13 @@
+[![CI](https://github.com/costajohnt/mermaid-to-pdf-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/costajohnt/mermaid-to-pdf-vscode/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/markdown-mermaid-converter)](https://www.npmjs.com/package/markdown-mermaid-converter)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 # Markdown Mermaid Converter
 
 Transform your ideas into professional documents with beautiful diagrams - just by asking for them. Convert Markdown with Mermaid diagrams to PDF.
 
 ![MCP Server](https://img.shields.io/badge/MCP-Server-purple)
 ![CLI Tool](https://img.shields.io/badge/CLI-Tool-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.0.0-orange)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-brightgreen)
 
 ## 🤖 For AI Users
