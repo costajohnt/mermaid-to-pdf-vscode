@@ -240,4 +240,40 @@ describe('sanitizeErrorMessage', () => {
     test('handles empty string', () => {
         assert.equal(sanitizeErrorMessage(''), '');
     });
+
+    test('preserves https URLs', () => {
+        const msg = 'Download from https://example.com/path/to/file.zip failed';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, msg);
+    });
+
+    test('preserves http URLs', () => {
+        const msg = 'Cannot reach http://localhost:3000/api/health';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, msg);
+    });
+
+    test('preserves file:// URLs', () => {
+        const msg = 'Load file:///home/user/doc.html';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, msg);
+    });
+
+    test('sanitizes Windows-style paths', () => {
+        const msg = 'Error in C:\\Users\\john\\Documents\\file.txt';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Error in file.txt');
+    });
+
+    test('handles single path component', () => {
+        const msg = 'Cannot access /etc';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Cannot access etc');
+    });
+
+    test('does not mangle a lone forward slash', () => {
+        const msg = 'Root is /';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Root is /');
+    });
 });

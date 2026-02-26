@@ -16,17 +16,34 @@ import { validateOptions, validatePath } from './validation.js';
  * Sanitize error messages before returning them to MCP clients.
  * Replaces absolute file paths with just the filename to avoid
  * leaking server-side directory structure.
+ *
+ * Handles:
+ * - Unix paths: /home/user/file.txt
+ * - Windows paths: C:\Users\user\file.txt
+ * - Preserves URLs with schemes (http://, https://, file://)
  */
 function sanitizeErrorMessage(message: string): string {
-  // Match absolute paths: Unix (/...) and Windows (C:\...)
-  // Captures sequences starting with / or drive letter that contain
-  // path separators and end at a word boundary or whitespace.
+  // Match absolute file paths but skip URLs.
+  //
+  // Strategy: use a single regex with alternation.  The first
+  // alternative captures full URLs (scheme + authority + path) so they
+  // are consumed and returned unchanged.  The second alternative
+  // matches bare absolute file paths and replaces them with just the
+  // basename.
+  //
+  //   Group 1 – Full URL (scheme://…) — preserved
+  //   Group 2 – Bare absolute path  — replaced with basename
   return message.replace(
-    /(?:[A-Za-z]:\\|\/)[^\s:,"']+/g,
-    (match) => {
-      // Extract the basename (last path component)
-      const basename = match.split(/[/\\]/).filter(Boolean).pop();
-      return basename || '<path>';
+    /(\w+:\/\/[^\s,"']+)|((?:[A-Za-z]:\\|\/)[^\s:,"']+)/g,
+    (match, url: string | undefined, filePath: string | undefined) => {
+      // URL with scheme (http://, https://, file://) — keep as-is
+      if (url) return match;
+      // File path — extract basename
+      if (filePath) {
+        const basename = filePath.split(/[/\\]/).filter(Boolean).pop();
+        return basename || '<path>';
+      }
+      return match;
     },
   );
 }
