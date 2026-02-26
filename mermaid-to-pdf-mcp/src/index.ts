@@ -264,7 +264,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'validate_markdown': {
-        const { markdown } = args as any;
+        const { markdown } = args as Record<string, unknown>;
 
         if (!markdown || typeof markdown !== 'string') {
           throw new McpError(

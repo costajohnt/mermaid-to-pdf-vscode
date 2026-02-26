@@ -58,9 +58,9 @@ function extractDiagramType(code: string): string | null {
     for (const raw of lines) {
         const line = raw.trim();
         // Skip empty lines
-        if (line.length === 0) continue;
+        if (line.length === 0) { continue; }
         // Skip directive lines %%{ ... }%%
-        if (line.startsWith('%%{') || line.startsWith('%%')) continue;
+        if (line.startsWith('%%{') || line.startsWith('%%')) { continue; }
         // The first significant token is the diagram type
         // Mermaid types can be multi-word with hyphen (e.g. "stateDiagram-v2")
         // or followed by whitespace/colon (e.g. "flowchart LR", "graph TD")
