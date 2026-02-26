@@ -10,46 +10,7 @@ import {
 import { MermaidConverter, type Logger } from './converter.js';
 import { homedir } from 'os';
 import path from 'path';
-import { validateOptions, validatePath } from './validation.js';
-
-/**
- * Sanitize error messages before returning them to MCP clients.
- * Replaces absolute file paths with just the filename to avoid
- * leaking server-side directory structure.
- *
- * Handles:
- * - Unix paths: /home/user/file.txt
- * - Windows paths: C:\Users\user\file.txt
- * - Preserves URLs with schemes (http://, https://, file://)
- */
-function sanitizeErrorMessage(message: string): string {
-  // Match absolute file paths but skip URLs.
-  //
-  // Strategy: use a single regex with alternation.  The first
-  // alternative captures full URLs (scheme + authority + path) so they
-  // are consumed and returned unchanged.  The second alternative
-  // matches bare absolute file paths and replaces them with just the
-  // basename.
-  //
-  //   Group 1 – Full URL (scheme://…) — preserved
-  //   Group 2 – Bare absolute path  — replaced with basename
-  return message.replace(
-    /(\w+:\/\/[^\s,"']+)|((?:[A-Za-z]:\\|\/)[^\s:,"']+)/g,
-    (match, url: string | undefined, filePath: string | undefined) => {
-      // URL with scheme (http://, https://, file://) — keep as-is
-      if (url) return match;
-      // File path — extract basename
-      if (filePath) {
-        const basename = filePath.split(/[/\\]/).filter(Boolean).pop();
-        return basename || '<path>';
-      }
-      return match;
-    },
-  );
-}
-
-// Re-export validation functions and sanitizeErrorMessage for backward compatibility and testing
-export { validateOptions, validatePath, sanitizeErrorMessage };
+import { validateOptions, validatePath, sanitizeErrorMessage } from './validation.js';
 
 // Silent logger — only log errors/warnings to stderr to avoid MCP protocol noise.
 // Enable debug/info with MCP_DEBUG=1.

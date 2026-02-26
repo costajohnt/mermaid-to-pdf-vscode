@@ -2,8 +2,7 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { validateOptions, validatePath } from './validation.js';
-import { sanitizeErrorMessage } from './index.js';
+import { validateOptions, validatePath, sanitizeErrorMessage } from './validation.js';
 import { homedir, tmpdir } from 'os';
 import path from 'path';
 
