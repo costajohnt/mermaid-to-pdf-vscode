@@ -1,61 +1,14 @@
-import puppeteer, { type Browser } from 'puppeteer';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { RenderedDiagram } from './types.js';
-import { getBrowserArgs, RENDER_TIMEOUT } from './types.js';
+import { RENDER_TIMEOUT } from './types.js';
+import { getBrowser, closeBrowser } from './browserManager.js';
 
-// Module-level browser singleton (lazy-init)
-let browserInstance: Browser | null = null;
-let browserLaunchPromise: Promise<Browser> | null = null;
+// Re-export closeBrowser so existing callers (tests, cli) keep working.
+export { closeBrowser };
+
 const PADDING = 10;
-
-/**
- * Get or create the singleton browser instance.
- * Uses a launch-in-progress promise to prevent duplicate browser launches
- * from concurrent calls.
- */
-async function getBrowser(): Promise<Browser> {
-    if (browserInstance && browserInstance.connected) {
-        return browserInstance;
-    }
-    if (browserLaunchPromise) {
-        return browserLaunchPromise;
-    }
-    browserLaunchPromise = puppeteer.launch({
-        headless: true,
-        args: getBrowserArgs(),
-    }).then(browser => {
-        browserInstance = browser;
-        browserLaunchPromise = null;
-        return browser;
-    }).catch(err => {
-        browserLaunchPromise = null;
-        throw err;
-    });
-    return browserLaunchPromise;
-}
-
-/**
- * Close the singleton browser instance. Call this during cleanup.
- */
-export async function closeBrowser(): Promise<void> {
-    if (browserLaunchPromise) {
-        try {
-            await browserLaunchPromise;
-        } catch {
-            // launch failed — nothing to close
-        }
-    }
-    if (browserInstance) {
-        try {
-            await browserInstance.close();
-        } catch (err) {
-            console.error('Warning: Failed to close browser:', err instanceof Error ? err.message : String(err));
-        }
-        browserInstance = null;
-    }
-}
 
 /**
  * Load the vendored mermaid.min.js source code (cached at module level).

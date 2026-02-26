@@ -1,9 +1,9 @@
 // src/converter.ts
 import { promises as fs } from 'fs';
 import { marked } from 'marked';
-import puppeteer, { type Browser } from 'puppeteer';
 import { renderMermaidToSvg } from './mermaidRenderer.js';
 import { DiagramCache } from './diagramCache.js';
+import { getBrowser } from './browserManager.js';
 import {
     ConversionOptions,
     DEFAULT_OPTIONS,
@@ -13,55 +13,19 @@ import {
     PDF_TIMEOUT,
     VALID_THEMES,
     VALID_PAGE_SIZES,
-    getBrowserArgs,
 } from './types.js';
 
 /** DPI for mm-to-px conversion (CSS reference pixel) */
 const DPI = 96;
 
-// ---------------------------------------------------------------------------
-// PDF browser singleton (separate from the mermaid renderer singleton)
-// ---------------------------------------------------------------------------
-let pdfBrowserInstance: Browser | null = null;
-let pdfBrowserLaunchPromise: Promise<Browser> | null = null;
-
-async function getPdfBrowser(): Promise<Browser> {
-    if (pdfBrowserInstance && pdfBrowserInstance.connected) {
-        return pdfBrowserInstance;
-    }
-    if (pdfBrowserLaunchPromise) {
-        return pdfBrowserLaunchPromise;
-    }
-    pdfBrowserLaunchPromise = puppeteer.launch({
-        headless: true,
-        args: getBrowserArgs(),
-    }).then(browser => {
-        pdfBrowserInstance = browser;
-        pdfBrowserLaunchPromise = null;
-        return browser;
-    }).catch(err => {
-        pdfBrowserLaunchPromise = null;
-        throw err;
-    });
-    return pdfBrowserLaunchPromise;
-}
-
+/**
+ * @deprecated No longer needed -- browser is managed by browserManager.
+ * Kept for backward compatibility; callers that still call closePdfBrowser()
+ * (tests, CLI) will simply no-op.
+ */
 export async function closePdfBrowser(): Promise<void> {
-    if (pdfBrowserLaunchPromise) {
-        try {
-            await pdfBrowserLaunchPromise;
-        } catch {
-            // launch failed — nothing to close
-        }
-    }
-    if (pdfBrowserInstance) {
-        try {
-            await pdfBrowserInstance.close();
-        } catch (err) {
-            console.error('Warning: Failed to close PDF browser:', err instanceof Error ? err.message : String(err));
-        }
-        pdfBrowserInstance = null;
-    }
+    // No-op: the shared browser in browserManager.ts is closed via
+    // closeBrowser() from mermaidRenderer.ts / browserManager.ts.
 }
 
 /** Mermaid fenced code block pattern */
@@ -588,18 +552,18 @@ export class Converter {
         const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
         const fullHtml = buildHtmlDocument(adjustedHtml, this.options.theme);
 
-        // 5. Generate PDF with a dedicated Puppeteer browser instance
+        // 5. Generate PDF with the shared Puppeteer browser instance
         const pdfBuffer = await this._generatePdf(fullHtml);
 
         return { pdfBuffer, diagramCount };
     }
 
     // ------------------------------------------------------------------
-    // PDF generation (own browser, separate from the renderer singleton)
+    // PDF generation (shared browser via browserManager)
     // ------------------------------------------------------------------
 
     private async _generatePdf(html: string): Promise<Buffer> {
-        const browser = await getPdfBrowser();
+        const browser = await getBrowser();
         const page = await browser.newPage();
 
         try {
