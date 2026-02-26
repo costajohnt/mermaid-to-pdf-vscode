@@ -6,6 +6,30 @@ import { ConversionOptions } from './types.js';
 import { homedir, tmpdir } from 'os';
 import { resolve, sep } from 'path';
 
+/**
+ * Sanitize error messages before returning them to MCP clients.
+ * Replaces absolute file paths with just the filename to avoid
+ * leaking server-side directory structure.
+ *
+ * Handles:
+ * - Unix paths: /home/user/file.txt
+ * - Windows paths: C:\Users\user\file.txt
+ * - Preserves URLs with schemes (http://, https://, file://)
+ */
+export function sanitizeErrorMessage(message: string): string {
+    return message.replace(
+        /(\w+:\/\/[^\s,"']+)|((?:[A-Za-z]:\\|\/)[^\s:,"']+)/g,
+        (match, url: string | undefined, filePath: string | undefined) => {
+            if (url) return match;
+            if (filePath) {
+                const basename = filePath.split(/[/\\]/).filter(Boolean).pop();
+                return basename || '<path>';
+            }
+            return match;
+        },
+    );
+}
+
 // Option validation
 const VALID_THEMES = new Set(['light', 'dark']);
 const VALID_PAGES = new Set(['A4', 'Letter', 'Legal']);

@@ -197,6 +197,7 @@ function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark'): string {
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src data:;">
     <style>
         * {
             margin: 0;

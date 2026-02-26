@@ -2,7 +2,7 @@
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { validateOptions, validatePath } from './validation.js';
+import { validateOptions, validatePath, sanitizeErrorMessage } from './validation.js';
 import { homedir, tmpdir } from 'os';
 import path from 'path';
 
@@ -196,5 +196,83 @@ describe('validatePath', () => {
         const testPath = path.join(tmpdir(), 'test.pdf');
         const result = validatePath(testPath, 'outputPath');
         assert.equal(result, path.resolve(testPath));
+    });
+});
+
+// ---------------------------------------------------------------------------
+// sanitizeErrorMessage
+// ---------------------------------------------------------------------------
+describe('sanitizeErrorMessage', () => {
+    test('replaces absolute Unix paths with basenames', () => {
+        const msg = 'Failed to read /home/user/Documents/secret/input.md';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Failed to read input.md');
+    });
+
+    test('replaces multiple absolute paths in one message', () => {
+        const msg = 'Cannot copy /home/user/src/file.ts to /var/data/output.pdf';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Cannot copy file.ts to output.pdf');
+    });
+
+    test('preserves messages without absolute paths', () => {
+        const msg = 'Invalid theme: neon. Must be "light" or "dark".';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, msg);
+    });
+
+    test('handles deeply nested paths', () => {
+        const msg = 'Error at /Users/johndoe/projects/app/src/lib/utils/converter.ts';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Error at converter.ts');
+    });
+
+    test('preserves the rest of the error message around paths', () => {
+        const msg = 'CLI tool not found. Checked PATH and /usr/local/lib/dist/cli.js (file does not exist).';
+        const result = sanitizeErrorMessage(msg);
+        // The path gets replaced, punctuation after it preserved
+        assert.ok(!result.includes('/usr/local'));
+        assert.ok(result.includes('cli.js'));
+        assert.ok(result.includes('file does not exist'));
+    });
+
+    test('handles empty string', () => {
+        assert.equal(sanitizeErrorMessage(''), '');
+    });
+
+    test('preserves https URLs', () => {
+        const msg = 'Download from https://example.com/path/to/file.zip failed';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, msg);
+    });
+
+    test('preserves http URLs', () => {
+        const msg = 'Cannot reach http://localhost:3000/api/health';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, msg);
+    });
+
+    test('preserves file:// URLs', () => {
+        const msg = 'Load file:///home/user/doc.html';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, msg);
+    });
+
+    test('sanitizes Windows-style paths', () => {
+        const msg = 'Error in C:\\Users\\john\\Documents\\file.txt';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Error in file.txt');
+    });
+
+    test('handles single path component', () => {
+        const msg = 'Cannot access /etc';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Cannot access etc');
+    });
+
+    test('does not mangle a lone forward slash', () => {
+        const msg = 'Root is /';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Root is /');
     });
 });

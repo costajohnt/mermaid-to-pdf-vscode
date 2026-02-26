@@ -10,10 +10,7 @@ import {
 import { MermaidConverter, type Logger } from './converter.js';
 import { homedir } from 'os';
 import path from 'path';
-import { validateOptions, validatePath } from './validation.js';
-
-// Re-export validation functions for backward compatibility
-export { validateOptions, validatePath };
+import { validateOptions, validatePath, sanitizeErrorMessage } from './validation.js';
 
 // Silent logger — only log errors/warnings to stderr to avoid MCP protocol noise.
 // Enable debug/info with MCP_DEBUG=1.
@@ -254,7 +251,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${errorMessage}`);
+    throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${sanitizeErrorMessage(errorMessage)}`);
   }
 });
 
