@@ -8,9 +8,11 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { MermaidConverter, type Logger } from './converter.js';
+import { validateMarkdown } from './validateMarkdown.js';
 import { homedir } from 'os';
 import path from 'path';
 import { validateOptions, validatePath, sanitizeErrorMessage } from './validation.js';
+export { validateMarkdown } from './validateMarkdown.js';
 
 // Silent logger — only log errors/warnings to stderr to avoid MCP protocol noise.
 // Enable debug/info with MCP_DEBUG=1.
@@ -108,6 +110,21 @@ const TOOLS = {
         }
       },
       required: ['inputPath']
+    }
+  },
+
+  validateMarkdown: {
+    name: 'validate_markdown',
+    description: 'Validate Mermaid diagrams in Markdown content. Checks that each mermaid code block starts with a recognized diagram type keyword. Returns structured validation results without requiring Puppeteer.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        markdown: {
+          type: 'string',
+          description: 'Markdown content containing mermaid code blocks to validate',
+        },
+      },
+      required: ['markdown']
     }
   },
 };
@@ -241,6 +258,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 size: result.metadata.fileSize,
                 diagrams: result.metadata.diagramCount
               })
+            }
+          ]
+        };
+      }
+
+      case 'validate_markdown': {
+        const { markdown } = args as any;
+
+        if (!markdown || typeof markdown !== 'string') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'markdown parameter is required and must be a string'
+          );
+        }
+
+        const validationResult = validateMarkdown(markdown);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(validationResult)
             }
           ]
         };
