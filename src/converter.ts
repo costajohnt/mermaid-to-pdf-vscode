@@ -10,7 +10,6 @@ import {
     PAGE_DIMENSIONS,
     PageDimensions,
     RenderedDiagram,
-    MIN_SCALE,
     PDF_TIMEOUT,
     VALID_THEMES,
     VALID_PAGE_SIZES,
@@ -152,6 +151,35 @@ function escapeHtml(str: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// HTML post-processing
+// ---------------------------------------------------------------------------
+
+/**
+ * Absorb headings that immediately precede a `.mermaid-diagram` div.
+ *
+ * Chromium's PDF renderer ignores CSS `break-after: avoid` when the next
+ * block is taller than a page, so heading elements placed before (or even
+ * inside) the diagram container get orphaned.  The only reliable fix is to
+ * remove the heading element entirely and render its text via a CSS
+ * `::before` pseudo-element, which is an inseparable part of the parent
+ * box and cannot be page-broken away from it.
+ *
+ * The heading text and level are stored as `data-heading` and
+ * `data-heading-level` attributes on the diagram div.
+ */
+function attachHeadingsToDiagrams(html: string): string {
+    return html.replace(
+        /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>\s*(<div class="mermaid-diagram[^"]*")/g,
+        (_match, level, text, divStart) => {
+            // Strip any inner HTML tags to get plain text for the data attribute
+            const plain = text.replace(/<[^>]+>/g, '').trim();
+            const escaped = plain.replace(/"/g, '&quot;');
+            return `${divStart} data-heading="${escaped}" data-heading-level="${level}"`;
+        },
+    );
+}
+
+// ---------------------------------------------------------------------------
 // HTML document template
 // ---------------------------------------------------------------------------
 
@@ -191,6 +219,8 @@ function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark'): string {
             font-weight: 600;
             line-height: 1.25;
             color: ${fgHeading};
+            break-after: avoid;
+            page-break-after: avoid;
         }
 
         h1 {
@@ -313,6 +343,8 @@ function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark'): string {
         .mermaid-diagram {
             text-align: center;
             margin: 20px 0;
+            max-width: 100%;
+            overflow: hidden;
             page-break-inside: avoid;
             break-inside: avoid;
         }
@@ -324,7 +356,35 @@ function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark'): string {
 
         .mermaid-diagram svg {
             display: inline-block;
+            max-width: 100%;
+            height: auto;
         }
+
+        /* Heading rendered as ::before pseudo-element so Chromium's PDF
+           renderer cannot page-break it away from the diagram content. */
+        .mermaid-diagram[data-heading]::before {
+            content: attr(data-heading);
+            display: block;
+            text-align: left;
+            font-weight: 600;
+            line-height: 1.25;
+            color: ${fgHeading};
+            margin: 0 0 16px 0;
+        }
+        .mermaid-diagram[data-heading-level="1"]::before {
+            font-size: 2em;
+            border-bottom: 1px solid ${border};
+            padding-bottom: 0.3em;
+        }
+        .mermaid-diagram[data-heading-level="2"]::before {
+            font-size: 1.5em;
+            border-bottom: 1px solid ${border};
+            padding-bottom: 0.3em;
+        }
+        .mermaid-diagram[data-heading-level="3"]::before { font-size: 1.25em; }
+        .mermaid-diagram[data-heading-level="4"]::before { font-size: 1em; }
+        .mermaid-diagram[data-heading-level="5"]::before { font-size: 0.875em; }
+        .mermaid-diagram[data-heading-level="6"]::before { font-size: 0.85em; color: ${bqColor}; }
 
         /* ---- Error fallback box ---- */
         .mermaid-error {
@@ -474,9 +534,10 @@ export class Converter {
                     this.cache.set(mermaidCode, rendered, mermaidTheme);
                 }
 
-                // Width-first scaling
-                let scale = Math.min(dims.contentWidth / rendered.width, 1.0); // never upscale
-                if (scale < MIN_SCALE) { scale = MIN_SCALE; } // readability floor
+                // Scale to fit page width (never upscale). No floor — SVGs are
+                // vector so they remain sharp at any scale in PDF viewers.  A
+                // properly-scaled small diagram is far better than a clipped one.
+                const scale = Math.min(dims.contentWidth / rendered.width, 1.0);
 
                 const displayWidth  = Math.round(rendered.width  * scale);
                 const displayHeight = Math.round(rendered.height * scale);
@@ -485,6 +546,14 @@ export class Converter {
                 const allowBreak = displayHeight > dims.contentHeight;
                 const breakClass = allowBreak ? ' allow-break' : '';
 
+                // For very wide, short diagrams (e.g. flowchart LR), the scaled
+                // height can be a tiny sliver. Set a minimum container height so
+                // the diagram is still usable — the SVG will be centered inside.
+                const MIN_DIAGRAM_HEIGHT = 120; // px
+                const containerStyle = displayHeight < MIN_DIAGRAM_HEIGHT
+                    ? ` style="min-height:${MIN_DIAGRAM_HEIGHT}px;display:flex;align-items:center;justify-content:center"`
+                    : '';
+
                 // Rewrite SVG with display dimensions, preserving renderer's viewBox
                 const sized = resizeSvg(
                     rendered.svgString,
@@ -492,7 +561,7 @@ export class Converter {
                     displayHeight,
                 );
 
-                const replacement = `<div class="mermaid-diagram${breakClass}">${sized}</div>`;
+                const replacement = `<div class="mermaid-diagram${breakClass}"${containerStyle}>${sized}</div>`;
                 processed = processed.slice(0, start) + replacement + processed.slice(end);
                 diagramCount++;
             } catch (err) {
@@ -512,9 +581,13 @@ export class Converter {
 
         // 3. Convert processed markdown to HTML via marked (GFM)
         const bodyHtml = await marked(processed, { gfm: true });
-        const fullHtml = buildHtmlDocument(bodyHtml, this.options.theme);
 
-        // 4. Generate PDF with a dedicated Puppeteer browser instance
+        // 4. Move headings inside their adjacent diagram containers so
+        //    Chromium's PDF renderer can't orphan them on a prior page.
+        const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
+        const fullHtml = buildHtmlDocument(adjustedHtml, this.options.theme);
+
+        // 5. Generate PDF with a dedicated Puppeteer browser instance
         const pdfBuffer = await this._generatePdf(fullHtml);
 
         return { pdfBuffer, diagramCount };
