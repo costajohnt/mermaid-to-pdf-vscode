@@ -3,6 +3,7 @@ import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { validateOptions, validatePath } from './validation.js';
+import { sanitizeErrorMessage } from './index.js';
 import { homedir, tmpdir } from 'os';
 import path from 'path';
 
@@ -196,5 +197,47 @@ describe('validatePath', () => {
         const testPath = path.join(tmpdir(), 'test.pdf');
         const result = validatePath(testPath, 'outputPath');
         assert.equal(result, path.resolve(testPath));
+    });
+});
+
+// ---------------------------------------------------------------------------
+// sanitizeErrorMessage
+// ---------------------------------------------------------------------------
+describe('sanitizeErrorMessage', () => {
+    test('replaces absolute Unix paths with basenames', () => {
+        const msg = 'Failed to read /home/user/Documents/secret/input.md';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Failed to read input.md');
+    });
+
+    test('replaces multiple absolute paths in one message', () => {
+        const msg = 'Cannot copy /home/user/src/file.ts to /var/data/output.pdf';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Cannot copy file.ts to output.pdf');
+    });
+
+    test('preserves messages without absolute paths', () => {
+        const msg = 'Invalid theme: neon. Must be "light" or "dark".';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, msg);
+    });
+
+    test('handles deeply nested paths', () => {
+        const msg = 'Error at /Users/johndoe/projects/app/src/lib/utils/converter.ts';
+        const result = sanitizeErrorMessage(msg);
+        assert.equal(result, 'Error at converter.ts');
+    });
+
+    test('preserves the rest of the error message around paths', () => {
+        const msg = 'CLI tool not found. Checked PATH and /usr/local/lib/dist/cli.js (file does not exist).';
+        const result = sanitizeErrorMessage(msg);
+        // The path gets replaced, punctuation after it preserved
+        assert.ok(!result.includes('/usr/local'));
+        assert.ok(result.includes('cli.js'));
+        assert.ok(result.includes('file does not exist'));
+    });
+
+    test('handles empty string', () => {
+        assert.equal(sanitizeErrorMessage(''), '');
     });
 });

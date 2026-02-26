@@ -12,8 +12,27 @@ import { homedir } from 'os';
 import path from 'path';
 import { validateOptions, validatePath } from './validation.js';
 
-// Re-export validation functions for backward compatibility
-export { validateOptions, validatePath };
+/**
+ * Sanitize error messages before returning them to MCP clients.
+ * Replaces absolute file paths with just the filename to avoid
+ * leaking server-side directory structure.
+ */
+function sanitizeErrorMessage(message: string): string {
+  // Match absolute paths: Unix (/...) and Windows (C:\...)
+  // Captures sequences starting with / or drive letter that contain
+  // path separators and end at a word boundary or whitespace.
+  return message.replace(
+    /(?:[A-Za-z]:\\|\/)[^\s:,"']+/g,
+    (match) => {
+      // Extract the basename (last path component)
+      const basename = match.split(/[/\\]/).filter(Boolean).pop();
+      return basename || '<path>';
+    },
+  );
+}
+
+// Re-export validation functions and sanitizeErrorMessage for backward compatibility and testing
+export { validateOptions, validatePath, sanitizeErrorMessage };
 
 // Silent logger — only log errors/warnings to stderr to avoid MCP protocol noise.
 // Enable debug/info with MCP_DEBUG=1.
@@ -254,7 +273,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${errorMessage}`);
+    throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${sanitizeErrorMessage(errorMessage)}`);
   }
 });
 
