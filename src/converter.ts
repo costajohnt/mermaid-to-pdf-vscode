@@ -113,7 +113,7 @@ function resizeSvg(svgString: string, displayWidth: number, displayHeight: numbe
  * not available the browser picks the next in the stack.
  */
 function buildFontStyle(font?: string, codeFont?: string): string {
-    if (!font && !codeFont) return '';
+    if (!font && !codeFont) { return ''; }
     const rules: string[] = [];
     if (font) {
         // Prepend the user font to the default stack so it falls back gracefully
@@ -744,7 +744,7 @@ export class Converter {
                 // Ensure top/bottom margins are at least 15mm when using header/footer.
                 const ensureMinMargin = (value: string, minMm: number): string => {
                     const match = value.trim().match(/^(\d+(?:\.\d+)?)(mm|cm|in|px)$/);
-                    if (!match) return `${minMm}mm`;
+                    if (!match) { return `${minMm}mm`; }
                     const num = parseFloat(match[1]);
                     const unit = match[2];
                     let mm: number;
