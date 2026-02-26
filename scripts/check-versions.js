@@ -12,11 +12,31 @@ import { fileURLToPath } from 'url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-const cliPkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf-8'));
-const mcpPkg = JSON.parse(readFileSync(resolve(root, 'mermaid-to-pdf-mcp/package.json'), 'utf-8'));
+function loadPackageJson(relativePath) {
+    const fullPath = resolve(root, relativePath);
+    try {
+        return JSON.parse(readFileSync(fullPath, 'utf-8'));
+    } catch (err) {
+        console.error(`Failed to read ${fullPath}: ${err.message}`);
+        process.exit(1);
+    }
+}
+
+const cliPkg = loadPackageJson('package.json');
+const mcpPkg = loadPackageJson('mermaid-to-pdf-mcp/package.json');
 
 const cliVersion = cliPkg.version;
 const mcpVersion = mcpPkg.version;
+
+if (typeof cliVersion !== 'string' || cliVersion.length === 0) {
+    console.error('CLI package.json is missing a "version" field.');
+    process.exit(1);
+}
+
+if (typeof mcpVersion !== 'string' || mcpVersion.length === 0) {
+    console.error('MCP server package.json is missing a "version" field.');
+    process.exit(1);
+}
 
 if (cliVersion !== mcpVersion) {
     console.error(

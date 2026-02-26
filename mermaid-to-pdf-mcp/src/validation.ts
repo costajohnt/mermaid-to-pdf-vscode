@@ -20,7 +20,7 @@ export function sanitizeErrorMessage(message: string): string {
     return message.replace(
         /(\w+:\/\/[^\s,"']+)|((?:[A-Za-z]:\\|\/)[^\s:,"']+)/g,
         (match, url: string | undefined, filePath: string | undefined) => {
-            if (url) return match;
+            if (url) { return match; }
             if (filePath) {
                 const basename = filePath.split(/[/\\]/).filter(Boolean).pop();
                 return basename || '<path>';

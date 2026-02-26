@@ -147,7 +147,7 @@ export async function createRenderSession(theme: string = 'default'): Promise<Me
             return renderOnPage(page, code);
         },
         close: async () => {
-            if (closed) return;
+            if (closed) { return; }
             closed = true;
             try {
                 if (!page.isClosed()) {
