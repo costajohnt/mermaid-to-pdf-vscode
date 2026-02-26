@@ -98,5 +98,19 @@ jobs:
     - name: Check bundle size
       run: |
         npm run build
+        SIZE=$(du -sb dist/ | cut -f1)
+        MAX=7000000  # 7 MB
         echo "## Bundle Size" >> "$GITHUB_STEP_SUMMARY"
-        du -sh dist/ >> "$GITHUB_STEP_SUMMARY"
+        echo "- Current: $(echo "$SIZE" | numfmt --to=iec-i)B ($SIZE bytes)" >> "$GITHUB_STEP_SUMMARY"
+        echo "- Limit: $(echo "$MAX" | numfmt --to=iec-i)B ($MAX bytes)" >> "$GITHUB_STEP_SUMMARY"
+        if [ "$SIZE" -gt "$MAX" ]; then
+          echo "::error::Bundle size $SIZE bytes exceeds limit $MAX bytes"
+          exit 1
+        fi
+        echo "Bundle size: $SIZE bytes (limit: $MAX bytes)"
+
+    - name: Run tests with coverage
+      run: npm run test:coverage
+      env:
+        NODE_ENV: test
+      timeout-minutes: 5
