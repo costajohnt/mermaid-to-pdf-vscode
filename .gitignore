@@ -21,6 +21,9 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Coverage output
+coverage/
+
 # Temporary files
 .temp_mermaid_*.png
 *.tmp

@@ -108,3 +108,9 @@ jobs:
           exit 1
         fi
         echo "Bundle size: $SIZE bytes (limit: $MAX bytes)"
+
+    - name: Run tests with coverage
+      run: npm run test:coverage
+      env:
+        NODE_ENV: test
+      timeout-minutes: 5
