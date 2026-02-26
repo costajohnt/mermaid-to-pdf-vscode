@@ -24,6 +24,7 @@ Options:
   --page-numbers          Add "Page X of Y" footer to PDF output
   --header <html>         Custom header HTML template for PDF output
   --footer <html>         Custom footer HTML template for PDF output
+  --css <css|file.css>    Inject custom CSS (inline string or .css file path)
   --json                  Output results as JSON to stdout
   -h, --help              Show this help message
 
@@ -53,6 +54,7 @@ Examples:
     let pageNumbers = false;
     let headerTemplate: string | undefined;
     let footerTemplate: string | undefined;
+    let customCss: string | undefined;
     let jsonOutput = false;
 
     for (let i = 0; i < argv.length; i++) {
@@ -126,6 +128,14 @@ Examples:
                 footerTemplate = argv[++i];
                 break;
             }
+            case '--css': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --css requires a CSS string or .css file path argument.');
+                    process.exit(1);
+                }
+                customCss = argv[++i];
+                break;
+            }
             case '--json':
                 jsonOutput = true;
                 break;
@@ -142,7 +152,7 @@ Examples:
     try {
         const startTime = Date.now();
         const ext = format === 'html' ? '.html' : '.pdf';
-        const converter = new Converter({ theme, pageSize, format, pageNumbers, headerTemplate, footerTemplate });
+        const converter = new Converter({ theme, pageSize, format, pageNumbers, headerTemplate, footerTemplate, customCss });
         let markdown: string;
 
         if (inputFile) {

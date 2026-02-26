@@ -20,6 +20,8 @@ export interface ConversionOptions {
     headerTemplate?: string;
     /** Custom footer HTML template (Puppeteer template variables: pageNumber, totalPages, date, title) */
     footerTemplate?: string;
+    /** Custom CSS to inject after the default styles (inline string or file path ending in .css) */
+    customCss?: string;
 }
 
 /**

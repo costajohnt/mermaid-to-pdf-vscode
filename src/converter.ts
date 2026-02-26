@@ -151,7 +151,7 @@ function attachHeadingsToDiagrams(html: string): string {
 // HTML document template
 // ---------------------------------------------------------------------------
 
-function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark'): string {
+function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark', customCss?: string): string {
     const isDark = theme === 'dark';
     const bg        = isDark ? '#0d1117' : '#ffffff';
     const fg        = isDark ? '#e6edf3' : '#24292e';
@@ -382,7 +382,7 @@ function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark'): string {
                 max-width: none;
             }
         }
-    </style>
+    </style>${customCss ? `\n    <style>\n        /* User custom CSS */\n${customCss.split('\n').map(l => '        ' + l).join('\n')}\n    </style>` : ''}
 </head>
 <body>
 ${bodyHtml}
@@ -635,12 +635,22 @@ export class Converter {
         // 3. Convert processed markdown to HTML via marked (GFM)
         const bodyHtml = await marked(processed, { gfm: true });
 
-        // 4. Move headings inside their adjacent diagram containers so
+        // 4. Resolve custom CSS (file path or inline string)
+        let resolvedCss: string | undefined;
+        if (this.options.customCss) {
+            if (this.options.customCss.endsWith('.css')) {
+                resolvedCss = await fs.readFile(this.options.customCss, 'utf-8');
+            } else {
+                resolvedCss = this.options.customCss;
+            }
+        }
+
+        // 5. Move headings inside their adjacent diagram containers so
         //    Chromium's PDF renderer can't orphan them on a prior page.
         const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
-        const fullHtml = buildHtmlDocument(adjustedHtml, this.options.theme);
+        const fullHtml = buildHtmlDocument(adjustedHtml, this.options.theme, resolvedCss);
 
-        // 5. If format is 'html', return the self-contained HTML directly
+        // 6. If format is 'html', return the self-contained HTML directly
         if (this.options.format === 'html') {
             const htmlBuffer = Buffer.from(fullHtml, 'utf-8');
             return {
@@ -651,7 +661,7 @@ export class Converter {
             };
         }
 
-        // 6. Generate PDF with the shared Puppeteer browser instance
+        // 7. Generate PDF with the shared Puppeteer browser instance
         const pdfBuffer = await this._generatePdf(fullHtml);
 
         return { pdfBuffer, diagramCount, fileSize: pdfBuffer.length };
