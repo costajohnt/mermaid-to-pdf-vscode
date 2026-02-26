@@ -25,6 +25,38 @@ function extractMermaidBlocks(markdown: string): string[] {
 // -----------------------------------------------------------------------
 
 const DIAGRAM_SAMPLES: Record<string, string> = {
+    'flowchart': [
+        'flowchart TD',
+        '    A[Start] --> B{Decision}',
+        '    B -->|Yes| C[OK]',
+        '    B -->|No| D[Cancel]',
+    ].join('\n'),
+
+    'sequence diagram': [
+        'sequenceDiagram',
+        '    Alice->>+John: Hello John',
+        '    John-->>-Alice: Hi Alice',
+    ].join('\n'),
+
+    'class diagram': [
+        'classDiagram',
+        '    class Animal {',
+        '        +String name',
+        '        +makeSound()',
+        '    }',
+        '    class Dog {',
+        '        +fetch()',
+        '    }',
+        '    Animal <|-- Dog',
+    ].join('\n'),
+
+    'pie chart': [
+        'pie title Pets',
+        '    "Dogs" : 386',
+        '    "Cats" : 85',
+        '    "Birds" : 15',
+    ].join('\n'),
+
     'state diagram': [
         'stateDiagram-v2',
         '    [*] --> Idle',

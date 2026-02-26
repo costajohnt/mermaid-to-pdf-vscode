@@ -6,7 +6,7 @@
 // without full Puppeteer rendering.  Run with:
 //   npm run benchmark
 
-import { performance, PerformanceObserver } from 'node:perf_hooks';
+import { performance } from 'node:perf_hooks';
 import { marked } from 'marked';
 
 // ---------------------------------------------------------------------------

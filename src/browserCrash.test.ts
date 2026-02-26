@@ -15,10 +15,17 @@ describe('Browser crash recovery: renderer errors', () => {
     });
 
     test('invalid mermaid syntax reports a clear error (not swallowed)', async () => {
-        const err = await assert.rejects(
+        await assert.rejects(
             () => renderMermaidToSvg('completely invalid %%% diagram $$$ syntax ???'),
+            (err: unknown) => {
+                assert.ok(err instanceof Error, 'should throw an Error instance');
+                assert.ok(
+                    err.message.includes('Failed to render'),
+                    `Error should mention "Failed to render", got: "${err.message}"`,
+                );
+                return true;
+            },
         );
-        // err was already asserted to be truthy by rejects()
     });
 
     test('error message includes "Failed to render" context', async () => {
