@@ -1,11 +1,13 @@
+[![CI](https://github.com/costajohnt/mermaid-to-pdf-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/costajohnt/mermaid-to-pdf-vscode/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/markdown-mermaid-converter-cli)](https://www.npmjs.com/package/markdown-mermaid-converter-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 # Markdown Mermaid Converter
 
 Transform your ideas into professional documents with beautiful diagrams - just by asking for them. Convert Markdown with Mermaid diagrams to PDF.
 
 ![MCP Server](https://img.shields.io/badge/MCP-Server-purple)
 ![CLI Tool](https://img.shields.io/badge/CLI-Tool-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.0.0-orange)
 ![Node.js](https://img.shields.io/badge/node.js-18%2B-brightgreen)
 
 ## 🤖 For AI Users
@@ -145,6 +147,73 @@ Options:
   -p, --page <size>     A4 | Letter | Legal (default: A4)
   --json                Output results as JSON to stdout
   -h, --help            Show this help message
+```
+
+### Programmatic Usage
+
+You can use the converter as a library in your own Node.js / TypeScript projects:
+
+```typescript
+import { Converter } from 'markdown-mermaid-converter-cli';
+
+const converter = new Converter({
+  theme: 'light',       // 'light' | 'dark' (default: 'light')
+  pageSize: 'A4',       // 'A4' | 'Letter' | 'Legal' (default: 'A4')
+  margins: {            // All margins accept 'mm', 'cm', 'in', or 'px' units
+    top: '15mm',
+    right: '15mm',
+    bottom: '15mm',
+    left: '15mm',
+  },
+});
+
+// Convert a markdown string to a PDF buffer
+const { pdfBuffer, diagramCount, fileSize } = await converter.convertString(`
+# My Document
+
+\`\`\`mermaid
+flowchart LR
+  A[Start] --> B[End]
+\`\`\`
+`);
+
+// Write the buffer to disk
+import { writeFile } from 'fs/promises';
+await writeFile('output.pdf', pdfBuffer);
+console.log(`Generated PDF: ${fileSize} bytes, ${diagramCount} diagrams`);
+
+// Or convert a file directly
+const result = await converter.convertFile('input.md', 'output.pdf');
+console.log(`Wrote ${result.fileSize} bytes with ${result.diagramCount} diagrams`);
+```
+
+#### Constructor Options
+
+| Option     | Type     | Default  | Description                            |
+|------------|----------|----------|----------------------------------------|
+| `theme`    | `string` | `'light'`| Mermaid theme: `'light'` or `'dark'`   |
+| `pageSize` | `string` | `'A4'`  | Page size: `'A4'`, `'Letter'`, `'Legal'`|
+| `margins`  | `object` | `'15mm'` each | Top/right/bottom/left with unit (`mm`, `cm`, `in`, `px`) |
+
+#### JSON Output Format
+
+When using the `--json` flag, the CLI outputs a JSON object to stdout:
+
+```json
+{
+  "outputPath": "/absolute/path/to/output.pdf",
+  "fileSize": 52480,
+  "diagramCount": 3,
+  "processingTimeMs": 1842
+}
+```
+
+On error, the JSON output contains an `error` field instead:
+
+```json
+{
+  "error": "Markdown content too large. Maximum size is 10 MB."
+}
 ```
 
 ---
