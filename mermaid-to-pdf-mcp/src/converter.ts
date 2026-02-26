@@ -1,25 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { tmpdir } from 'os';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { ConversionOptions, ConversionResult, FileConversionResult } from './types.js';
 
-const execFileAsync = promisify(execFile);
-
-/** Shape of the error thrown by execFile when the child process fails. */
-interface ExecFileError extends Error {
-    stdout?: string;
-    stderr?: string;
-    code?: number | string;
-}
-
-interface CliJsonResult {
-    outputPath: string;
-    fileSize: number;
-    diagramCount: number;
-    processingTimeMs: number;
-}
+// Import directly from the CLI package's compiled output
+// This avoids spawning a subprocess per request and lets us reuse
+// the browser across multiple conversions.
+import { Converter, closePdfBrowser } from '../../dist/index.js';
+import { closeBrowser } from '../../dist/mermaidRenderer.js';
 
 export interface Logger {
     info(obj: unknown, msg?: string): void;
@@ -28,151 +15,127 @@ export interface Logger {
     debug(obj: unknown, msg?: string): void;
 }
 
-export class MermaidConverter {
-    constructor(private logger: Logger) {}
+/** Default idle timeout before closing browser singletons (ms). */
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
 
-    private async findCli(): Promise<string> {
-        try {
-            const cmd = process.platform === 'win32' ? 'where' : 'which';
-            const { stdout } = await execFileAsync(cmd, ['markdown-mermaid-converter']);
-            return stdout.trim().split('\n')[0];
-        } catch (pathLookupErr) {
-            this.logger.warn(pathLookupErr, 'CLI not found on PATH, trying local build');
-            const currentDir = path.dirname(new URL(import.meta.url).pathname);
-            const localCli = path.resolve(currentDir, '../../../dist/cli.js');
-            try {
-                await fs.access(localCli);
-                return localCli;
-            } catch (accessErr: unknown) {
-                const errCode = accessErr instanceof Error && 'code' in accessErr
-                    ? (accessErr as NodeJS.ErrnoException).code
-                    : undefined;
-                const detail = errCode === 'ENOENT'
-                    ? 'file does not exist'
-                    : `access check failed: ${accessErr instanceof Error ? accessErr.message : String(accessErr)}`;
-                throw new Error(
-                    `CLI tool not found. Checked PATH and ${localCli} (${detail}). Install globally or build the CLI package.`
-                );
-            }
+export class MermaidConverter {
+    private idleTimer: ReturnType<typeof setTimeout> | null = null;
+    private readonly idleTimeoutMs: number;
+
+    constructor(
+        private logger: Logger,
+        idleTimeoutMs: number = DEFAULT_IDLE_TIMEOUT_MS,
+    ) {
+        this.idleTimeoutMs = idleTimeoutMs;
+    }
+
+    /**
+     * Reset the idle timer. Each conversion call resets it so the browser
+     * stays alive while requests keep coming. When the timer fires, both
+     * the mermaid renderer browser and the PDF browser are closed.
+     */
+    private resetIdleTimer(): void {
+        if (this.idleTimer) {
+            clearTimeout(this.idleTimer);
+        }
+        this.idleTimer = setTimeout(async () => {
+            this.logger.debug('Idle timeout reached, closing browsers');
+            await this.closeBrowsers();
+        }, this.idleTimeoutMs);
+        // Don't block the Node.js event loop from exiting
+        if (this.idleTimer && typeof this.idleTimer === 'object' && 'unref' in this.idleTimer) {
+            this.idleTimer.unref();
         }
     }
 
-    private async runCli(cliArgs: string[]): Promise<CliJsonResult> {
-        const cli = await this.findCli();
-        const args = [...cliArgs, '--json'];
-        const opts = { timeout: 60000, maxBuffer: 10 * 1024 * 1024 };
-
-        let stdout: string;
+    private async closeBrowsers(): Promise<void> {
         try {
-            const result = cli.endsWith('.js')
-                ? await execFileAsync('node', [cli, ...args], opts)
-                : await execFileAsync(cli, args, opts);
-            stdout = result.stdout;
-        } catch (execErr: unknown) {
-            // Try to extract structured JSON error from stdout first
-            const execError = execErr as ExecFileError;
-            const rawStdout = execError.stdout?.trim() || '';
-            if (rawStdout) {
-                try {
-                    const parsed = JSON.parse(rawStdout);
-                    if (parsed.error) {
-                        throw new Error(`CLI conversion failed: ${parsed.error}`);
-                    }
-                } catch (jsonErr: unknown) {
-                    if (jsonErr instanceof Error && jsonErr.message.startsWith('CLI conversion failed:')) {
-                        throw jsonErr;
-                    }
-                }
-            }
-            // Fall back to stderr or generic message
-            const stderr = execError.stderr?.trim() || '';
-            const msg = stderr || (execErr instanceof Error ? execErr.message : String(execErr));
-            throw new Error(`CLI conversion failed: ${msg}`);
+            await closeBrowser();
+        } catch (err) {
+            this.logger.warn(err, 'Failed to close mermaid renderer browser');
         }
-
         try {
-            const parsed = JSON.parse(stdout.trim());
-            if (typeof parsed?.fileSize !== 'number' || typeof parsed?.diagramCount !== 'number') {
-                throw new Error(
-                    `CLI returned unexpected JSON structure. Raw stdout: ${stdout.slice(0, 200)}`
-                );
-            }
-            return parsed as CliJsonResult;
-        } catch (parseErr) {
-            if (!(parseErr instanceof SyntaxError)) {
-                throw parseErr;
-            }
-            throw new Error(
-                `CLI produced invalid JSON output (${parseErr.message}). Raw stdout: ${stdout?.slice(0, 200) ?? '<null>'}`
-            );
+            await closePdfBrowser();
+        } catch (err) {
+            this.logger.warn(err, 'Failed to close PDF browser');
         }
     }
 
     async convertMarkdownToPdf(markdown: string, options: ConversionOptions = {}): Promise<ConversionResult> {
-        const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'mcp-mermaid-'));
+        this.resetIdleTimer();
+        const startTime = Date.now();
 
-        try {
-            const inputFile = path.join(tempDir, 'input.md');
-            const outputFile = path.join(tempDir, 'output.pdf');
-            await fs.writeFile(inputFile, markdown, 'utf-8');
+        const converter = new Converter({
+            theme: options.theme,
+            pageSize: options.pageSize,
+            format: options.format,
+        });
 
-            const cliArgs = [inputFile, '-o', outputFile];
-            if (options.theme) { cliArgs.push('-t', options.theme); }
-            if (options.pageSize) { cliArgs.push('-p', options.pageSize); }
-            if (options.format) { cliArgs.push('-f', options.format); }
+        const result = await converter.convertString(markdown);
 
-            const result = await this.runCli(cliArgs);
-            const outputBuffer = await fs.readFile(outputFile);
-
-            return {
-                pdfBase64: outputBuffer.toString('base64'),
-                metadata: {
-                    fileSize: result.fileSize,
-                    diagramCount: result.diagramCount,
-                    processingTime: result.processingTimeMs,
-                },
-            };
-        } finally {
-            try {
-                await fs.rm(tempDir, { recursive: true, force: true });
-            } catch (cleanupErr) {
-                this.logger.warn(
-                    cleanupErr,
-                    `Failed to clean up temp directory ${tempDir}`
-                );
-            }
-        }
+        return {
+            pdfBase64: result.pdfBuffer.toString('base64'),
+            metadata: {
+                fileSize: result.fileSize,
+                diagramCount: result.diagramCount,
+                processingTime: Date.now() - startTime,
+            },
+        };
     }
 
     async convertFileToFile(inputPath: string, outputPath?: string, options: ConversionOptions = {}): Promise<FileConversionResult> {
+        this.resetIdleTimer();
+        const startTime = Date.now();
+
         const resolvedOutput = outputPath || (
             /\.md$/i.test(inputPath) ? inputPath.replace(/\.md$/i, '.pdf') : inputPath + '.pdf'
         );
 
-        const cliArgs = [inputPath, '-o', resolvedOutput];
-        if (options.theme) { cliArgs.push('-t', options.theme); }
-        if (options.pageSize) { cliArgs.push('-p', options.pageSize); }
-        if (options.format) { cliArgs.push('-f', options.format); }
+        const converter = new Converter({
+            theme: options.theme,
+            pageSize: options.pageSize,
+            format: options.format,
+        });
 
-        const result = await this.runCli(cliArgs);
+        const result = await converter.convertFile(inputPath, resolvedOutput);
 
         return {
-            outputPath: result.outputPath,
+            outputPath: path.resolve(resolvedOutput),
             metadata: {
                 fileSize: result.fileSize,
                 diagramCount: result.diagramCount,
-                processingTime: result.processingTimeMs,
+                processingTime: Date.now() - startTime,
             },
         };
     }
 
     async convertFileToFileFromContent(markdown: string, outputPath: string, options: ConversionOptions = {}): Promise<FileConversionResult> {
-        const result = await this.convertMarkdownToPdf(markdown, options);
-        await fs.writeFile(outputPath, Buffer.from(result.pdfBase64, 'base64'));
-        return { outputPath, metadata: result.metadata };
+        this.resetIdleTimer();
+        const startTime = Date.now();
+
+        const converter = new Converter({
+            theme: options.theme,
+            pageSize: options.pageSize,
+        });
+
+        const result = await converter.convertString(markdown);
+        await fs.writeFile(outputPath, result.pdfBuffer);
+
+        return {
+            outputPath,
+            metadata: {
+                fileSize: result.fileSize,
+                diagramCount: result.diagramCount,
+                processingTime: Date.now() - startTime,
+            },
+        };
     }
 
     async cleanup(): Promise<void> {
-        // No browser to clean up — CLI handles its own lifecycle
+        if (this.idleTimer) {
+            clearTimeout(this.idleTimer);
+            this.idleTimer = null;
+        }
+        await this.closeBrowsers();
     }
 }
