@@ -108,6 +108,24 @@ function resizeSvg(svgString: string, displayWidth: number, displayHeight: numbe
 }
 
 /**
+ * Build a <style> block for custom font overrides.
+ * Falls back gracefully via CSS font stacks — if the specified font is
+ * not available the browser picks the next in the stack.
+ */
+function buildFontStyle(font?: string, codeFont?: string): string {
+    if (!font && !codeFont) return '';
+    const rules: string[] = [];
+    if (font) {
+        // Prepend the user font to the default stack so it falls back gracefully
+        rules.push(`        body { font-family: '${font}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }`);
+    }
+    if (codeFont) {
+        rules.push(`        code, pre { font-family: '${codeFont}', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }`);
+    }
+    return `\n    <style>\n        /* Font overrides */\n${rules.join('\n')}\n    </style>`;
+}
+
+/**
  * Escape HTML special characters in a string.
  */
 function escapeHtml(str: string): string {
@@ -151,7 +169,15 @@ function attachHeadingsToDiagrams(html: string): string {
 // HTML document template
 // ---------------------------------------------------------------------------
 
-function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark', customCss?: string): string {
+interface HtmlDocumentOptions {
+    theme: 'light' | 'dark';
+    customCss?: string;
+    font?: string;
+    codeFont?: string;
+}
+
+function buildHtmlDocument(bodyHtml: string, opts: HtmlDocumentOptions): string {
+    const { theme, customCss, font, codeFont } = opts;
     const isDark = theme === 'dark';
     const bg        = isDark ? '#0d1117' : '#ffffff';
     const fg        = isDark ? '#e6edf3' : '#24292e';
@@ -382,7 +408,7 @@ function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark', customCss?
                 max-width: none;
             }
         }
-    </style>${customCss ? `\n    <style>\n        /* User custom CSS */\n${customCss.split('\n').map(l => '        ' + l).join('\n')}\n    </style>` : ''}
+    </style>${buildFontStyle(font, codeFont)}${customCss ? `\n    <style>\n        /* User custom CSS */\n${customCss.split('\n').map(l => '        ' + l).join('\n')}\n    </style>` : ''}
 </head>
 <body>
 ${bodyHtml}
@@ -648,7 +674,12 @@ export class Converter {
         // 5. Move headings inside their adjacent diagram containers so
         //    Chromium's PDF renderer can't orphan them on a prior page.
         const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
-        const fullHtml = buildHtmlDocument(adjustedHtml, this.options.theme, resolvedCss);
+        const fullHtml = buildHtmlDocument(adjustedHtml, {
+            theme: this.options.theme,
+            customCss: resolvedCss,
+            font: this.options.font,
+            codeFont: this.options.codeFont,
+        });
 
         // 6. If format is 'html', return the self-contained HTML directly
         if (this.options.format === 'html') {

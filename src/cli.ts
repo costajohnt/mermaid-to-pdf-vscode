@@ -25,6 +25,8 @@ Options:
   --header <html>         Custom header HTML template for PDF output
   --footer <html>         Custom footer HTML template for PDF output
   --css <css|file.css>    Inject custom CSS (inline string or .css file path)
+  --font <family>         Set body text font-family (falls back gracefully)
+  --code-font <family>    Set code/pre font-family (falls back gracefully)
   --json                  Output results as JSON to stdout
   -h, --help              Show this help message
 
@@ -55,6 +57,8 @@ Examples:
     let headerTemplate: string | undefined;
     let footerTemplate: string | undefined;
     let customCss: string | undefined;
+    let font: string | undefined;
+    let codeFont: string | undefined;
     let jsonOutput = false;
 
     for (let i = 0; i < argv.length; i++) {
@@ -136,6 +140,22 @@ Examples:
                 customCss = argv[++i];
                 break;
             }
+            case '--font': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --font requires a font-family name argument.');
+                    process.exit(1);
+                }
+                font = argv[++i];
+                break;
+            }
+            case '--code-font': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --code-font requires a font-family name argument.');
+                    process.exit(1);
+                }
+                codeFont = argv[++i];
+                break;
+            }
             case '--json':
                 jsonOutput = true;
                 break;
@@ -152,7 +172,7 @@ Examples:
     try {
         const startTime = Date.now();
         const ext = format === 'html' ? '.html' : '.pdf';
-        const converter = new Converter({ theme, pageSize, format, pageNumbers, headerTemplate, footerTemplate, customCss });
+        const converter = new Converter({ theme, pageSize, format, pageNumbers, headerTemplate, footerTemplate, customCss, font, codeFont });
         let markdown: string;
 
         if (inputFile) {

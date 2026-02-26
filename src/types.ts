@@ -22,6 +22,10 @@ export interface ConversionOptions {
     footerTemplate?: string;
     /** Custom CSS to inject after the default styles (inline string or file path ending in .css) */
     customCss?: string;
+    /** Custom font-family for body text */
+    font?: string;
+    /** Custom font-family for code/pre elements */
+    codeFont?: string;
 }
 
 /**
