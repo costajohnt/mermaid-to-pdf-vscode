@@ -1,3 +1,4 @@
+import { type Page } from 'puppeteer';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -32,88 +33,131 @@ function loadMermaidScript(): string {
     return _mermaidScriptCache;
 }
 
+// ---------------------------------------------------------------------------
+// Render session — reuses a single page across multiple diagram renders
+// ---------------------------------------------------------------------------
+
 /**
- * Render a Mermaid diagram to SVG with measured dimensions.
+ * A render session keeps a single Puppeteer page alive with the mermaid
+ * library already injected. Rendering multiple diagrams avoids the overhead
+ * of creating a new page and re-injecting the 2.8 MB mermaid.min.js for
+ * each diagram.
  *
- * @param code - The Mermaid diagram source code
- * @param theme - Optional mermaid theme (default: 'default')
- * @returns A RenderedDiagram with the SVG string and pixel dimensions
+ * Usage:
+ *   const session = await createRenderSession('default');
+ *   try {
+ *       const svg1 = await session.render(code1);
+ *       const svg2 = await session.render(code2);
+ *   } finally {
+ *       await session.close();
+ *   }
  */
-export async function renderMermaidToSvg(
+export interface MermaidRenderSession {
+    /** Render a single diagram on the reused page. */
+    render(code: string): Promise<RenderedDiagram>;
+    /** Close the underlying page. */
+    close(): Promise<void>;
+}
+
+/**
+ * Create a render session with a single Puppeteer page and pre-loaded
+ * mermaid library. The session must be closed when rendering is complete.
+ */
+export async function createRenderSession(theme: string = 'default'): Promise<MermaidRenderSession> {
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+    page.setDefaultTimeout(RENDER_TIMEOUT);
+
+    // Load a minimal blank page with a container div already present
+    await page.setContent(
+        '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div id="mermaid-container"></div></body></html>',
+        { waitUntil: 'domcontentloaded' },
+    );
+
+    // Inject vendored mermaid.js once
+    const mermaidScript = loadMermaidScript();
+    await page.addScriptTag({ content: mermaidScript });
+
+    // Wait for mermaid global to be available
+    await page.waitForFunction(
+        () =>
+            typeof (window as any).mermaid !== 'undefined' &&
+            typeof (window as any).mermaid.initialize === 'function',
+        { timeout: RENDER_TIMEOUT },
+    );
+
+    // Initialize mermaid once with useMaxWidth: false on ALL diagram types
+    await page.evaluate((mermaidTheme: string) => {
+        const mermaid = (window as any).mermaid;
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: mermaidTheme,
+            securityLevel: 'strict',
+            logLevel: 'error',
+            flowchart: { useMaxWidth: false },
+            sequence: { useMaxWidth: false },
+            gantt: { useMaxWidth: false },
+            journey: { useMaxWidth: false },
+            timeline: { useMaxWidth: false },
+            class: { useMaxWidth: false },
+            state: { useMaxWidth: false },
+            er: { useMaxWidth: false },
+            pie: { useMaxWidth: false },
+            quadrantChart: { useMaxWidth: false },
+            requirement: { useMaxWidth: false },
+            mindmap: { useMaxWidth: false },
+            gitGraph: { useMaxWidth: false },
+            c4: { useMaxWidth: false },
+            sankey: { useMaxWidth: false },
+            block: { useMaxWidth: false },
+        });
+    }, theme);
+
+    return {
+        render: (code: string) => renderOnPage(page, code),
+        close: async () => {
+            try {
+                await page.close();
+            } catch (closeErr) {
+                console.error('Warning: Failed to close render session page:',
+                    closeErr instanceof Error ? closeErr.message : String(closeErr));
+            }
+        },
+    };
+}
+
+/**
+ * Render a single mermaid diagram on an already-initialised page.
+ * Clears the container div between renders rather than destroying the page.
+ */
+async function renderOnPage(
+    page: Page,
     code: string,
-    theme: string = 'default',
 ): Promise<RenderedDiagram> {
-    // Validate input
+    // Validate input (same checks as the standalone function)
     if (!code || typeof code !== 'string' || code.trim().length === 0) {
         throw new Error('Mermaid code must be a non-empty string');
     }
-
     if (code.length > 50_000) {
         throw new Error(
             `Mermaid code too large (${(code.length / 1024).toFixed(1)} KB). Maximum size is 50 KB.`
         );
     }
 
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-    page.setDefaultTimeout(RENDER_TIMEOUT);
-
     try {
-        // Load a minimal blank page
-        await page.setContent(
-            '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body></body></html>',
-            { waitUntil: 'domcontentloaded' },
-        );
-
-        // Inject vendored mermaid.js
-        const mermaidScript = loadMermaidScript();
-        await page.addScriptTag({ content: mermaidScript });
-
-        // Wait for mermaid global to be available
-        await page.waitForFunction(
-            () =>
-                typeof (window as any).mermaid !== 'undefined' &&
-                typeof (window as any).mermaid.initialize === 'function',
-            { timeout: RENDER_TIMEOUT },
-        );
-
-        // Initialize mermaid and render the diagram
         const result = await page.evaluate(
-            async (mermaidCode: string, mermaidTheme: string, padding: number) => {
+            async (mermaidCode: string, padding: number) => {
                 const mermaid = (window as any).mermaid;
 
-                // Initialize with useMaxWidth: false on ALL diagram types
-                mermaid.initialize({
-                    startOnLoad: false,
-                    theme: mermaidTheme,
-                    securityLevel: 'strict',
-                    logLevel: 'error',
-                    flowchart: { useMaxWidth: false },
-                    sequence: { useMaxWidth: false },
-                    gantt: { useMaxWidth: false },
-                    journey: { useMaxWidth: false },
-                    timeline: { useMaxWidth: false },
-                    class: { useMaxWidth: false },
-                    state: { useMaxWidth: false },
-                    er: { useMaxWidth: false },
-                    pie: { useMaxWidth: false },
-                    quadrantChart: { useMaxWidth: false },
-                    requirement: { useMaxWidth: false },
-                    mindmap: { useMaxWidth: false },
-                    gitGraph: { useMaxWidth: false },
-                    c4: { useMaxWidth: false },
-                    sankey: { useMaxWidth: false },
-                    block: { useMaxWidth: false },
-                });
+                // Clear previous diagram content from the container
+                const container = document.getElementById('mermaid-container')!;
+                while (container.firstChild) {
+                    container.removeChild(container.firstChild);
+                }
 
-                // Create a container div and a diagram div
-                const container = document.createElement('div');
-                container.id = 'mermaid-container';
-                document.body.appendChild(container);
-
+                // Create a fresh diagram div
                 const diagramDiv = document.createElement('div');
                 diagramDiv.className = 'mermaid';
-                // Use textContent to avoid HTML escaping issues
                 diagramDiv.textContent = mermaidCode;
                 container.appendChild(diagramDiv);
 
@@ -135,13 +179,11 @@ export async function renderMermaidToSvg(
                 // Measure via getBBox
                 const bbox = svg.getBBox();
 
-                // viewBox spans the full bounding box plus padding
                 const viewBoxX = bbox.x - padding;
                 const viewBoxY = bbox.y - padding;
                 const viewBoxW = bbox.width + padding * 2;
                 const viewBoxH = bbox.height + padding * 2;
 
-                // Pixel dimensions must match viewBox dimensions for 1:1 rendering
                 const width = Math.ceil(viewBoxW);
                 const height = Math.ceil(viewBoxH);
                 svg.setAttribute(
@@ -151,14 +193,12 @@ export async function renderMermaidToSvg(
                 svg.setAttribute('width', String(width));
                 svg.setAttribute('height', String(height));
 
-                // Remove any max-width style that mermaid might set
                 svg.style.maxWidth = '';
 
                 const svgString = svg.outerHTML;
                 return { svgString, width, height };
             },
             code,
-            theme,
             PADDING,
         );
 
@@ -170,17 +210,37 @@ export async function renderMermaidToSvg(
 
         return result as RenderedDiagram;
     } catch (error) {
-        // Re-throw with a consistent message prefix if not already formatted
         const msg = error instanceof Error ? error.message : String(error);
         if (msg.startsWith('Failed to render') || msg.includes('non-empty string') || msg.includes('too large')) {
             throw error;
         }
         throw new Error(`Failed to render Mermaid diagram: ${msg}`);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Standalone convenience function (backward-compatible)
+// ---------------------------------------------------------------------------
+
+/**
+ * Render a Mermaid diagram to SVG with measured dimensions.
+ * Creates a single-use render session internally.
+ *
+ * For rendering multiple diagrams, prefer createRenderSession() to avoid
+ * re-creating the page and re-injecting mermaid for each diagram.
+ *
+ * @param code - The Mermaid diagram source code
+ * @param theme - Optional mermaid theme (default: 'default')
+ * @returns A RenderedDiagram with the SVG string and pixel dimensions
+ */
+export async function renderMermaidToSvg(
+    code: string,
+    theme: string = 'default',
+): Promise<RenderedDiagram> {
+    const session = await createRenderSession(theme);
+    try {
+        return await session.render(code);
     } finally {
-        try {
-            await page.close();
-        } catch (closeErr) {
-            console.error('Warning: Failed to close page:', closeErr instanceof Error ? closeErr.message : String(closeErr));
-        }
+        await session.close();
     }
 }
