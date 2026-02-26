@@ -9,6 +9,7 @@ import { getBrowserArgs } from './types.js';
 
 let browserInstance: Browser | null = null;
 let browserLaunchPromise: Promise<Browser> | null = null;
+let exitHandlerRegistered = false;
 
 /**
  * Get or create the singleton browser instance.
@@ -28,6 +29,22 @@ export async function getBrowser(): Promise<Browser> {
     }).then(browser => {
         browserInstance = browser;
         browserLaunchPromise = null;
+
+        // Register process-exit cleanup once per browser lifetime.
+        // This ensures the Chromium process is killed if the Node process
+        // exits unexpectedly (crash, SIGTERM, etc.).
+        if (!exitHandlerRegistered) {
+            exitHandlerRegistered = true;
+            const cleanup = () => {
+                if (browserInstance && browserInstance.process()) {
+                    browserInstance.process()?.kill('SIGKILL');
+                }
+            };
+            process.on('exit', cleanup);
+            process.on('SIGINT', () => { cleanup(); process.exit(130); });
+            process.on('SIGTERM', () => { cleanup(); process.exit(143); });
+        }
+
         return browser;
     }).catch(err => {
         browserLaunchPromise = null;
@@ -41,19 +58,25 @@ export async function getBrowser(): Promise<Browser> {
  * Safe to call multiple times or when no browser was launched.
  */
 export async function closeBrowser(): Promise<void> {
-    if (browserLaunchPromise) {
+    // Grab and clear the launch promise so concurrent getBrowser() calls
+    // after close don't return the stale in-flight promise.
+    const pendingLaunch = browserLaunchPromise;
+    browserLaunchPromise = null;
+
+    if (pendingLaunch) {
         try {
-            await browserLaunchPromise;
+            await pendingLaunch;
         } catch {
             // launch failed -- nothing to close
         }
     }
     if (browserInstance) {
+        const instance = browserInstance;
+        browserInstance = null;
         try {
-            await browserInstance.close();
+            await instance.close();
         } catch (err) {
             console.error('Warning: Failed to close browser:', err instanceof Error ? err.message : String(err));
         }
-        browserInstance = null;
     }
 }

@@ -66,58 +66,80 @@ export interface MermaidRenderSession {
 export async function createRenderSession(theme: string = 'default'): Promise<MermaidRenderSession> {
     const browser = await getBrowser();
     const page = await browser.newPage();
-    page.setDefaultTimeout(RENDER_TIMEOUT);
 
-    // Load a minimal blank page with a container div already present
-    await page.setContent(
-        '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div id="mermaid-container"></div></body></html>',
-        { waitUntil: 'domcontentloaded' },
-    );
+    try {
+        page.setDefaultTimeout(RENDER_TIMEOUT);
 
-    // Inject vendored mermaid.js once
-    const mermaidScript = loadMermaidScript();
-    await page.addScriptTag({ content: mermaidScript });
+        // Load a minimal blank page with a container div already present
+        await page.setContent(
+            '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div id="mermaid-container"></div></body></html>',
+            { waitUntil: 'domcontentloaded' },
+        );
 
-    // Wait for mermaid global to be available
-    await page.waitForFunction(
-        () =>
-            typeof (window as any).mermaid !== 'undefined' &&
-            typeof (window as any).mermaid.initialize === 'function',
-        { timeout: RENDER_TIMEOUT },
-    );
+        // Inject vendored mermaid.js once
+        const mermaidScript = loadMermaidScript();
+        await page.addScriptTag({ content: mermaidScript });
 
-    // Initialize mermaid once with useMaxWidth: false on ALL diagram types
-    await page.evaluate((mermaidTheme: string) => {
-        const mermaid = (window as any).mermaid;
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: mermaidTheme,
-            securityLevel: 'strict',
-            logLevel: 'error',
-            flowchart: { useMaxWidth: false },
-            sequence: { useMaxWidth: false },
-            gantt: { useMaxWidth: false },
-            journey: { useMaxWidth: false },
-            timeline: { useMaxWidth: false },
-            class: { useMaxWidth: false },
-            state: { useMaxWidth: false },
-            er: { useMaxWidth: false },
-            pie: { useMaxWidth: false },
-            quadrantChart: { useMaxWidth: false },
-            requirement: { useMaxWidth: false },
-            mindmap: { useMaxWidth: false },
-            gitGraph: { useMaxWidth: false },
-            c4: { useMaxWidth: false },
-            sankey: { useMaxWidth: false },
-            block: { useMaxWidth: false },
-        });
-    }, theme);
+        // Wait for mermaid global to be available
+        await page.waitForFunction(
+            () =>
+                typeof (window as any).mermaid !== 'undefined' &&
+                typeof (window as any).mermaid.initialize === 'function',
+            { timeout: RENDER_TIMEOUT },
+        );
+
+        // Initialize mermaid once with useMaxWidth: false on ALL diagram types
+        await page.evaluate((mermaidTheme: string) => {
+            const mermaid = (window as any).mermaid;
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: mermaidTheme,
+                securityLevel: 'strict',
+                logLevel: 'error',
+                flowchart: { useMaxWidth: false },
+                sequence: { useMaxWidth: false },
+                gantt: { useMaxWidth: false },
+                journey: { useMaxWidth: false },
+                timeline: { useMaxWidth: false },
+                class: { useMaxWidth: false },
+                state: { useMaxWidth: false },
+                er: { useMaxWidth: false },
+                pie: { useMaxWidth: false },
+                quadrantChart: { useMaxWidth: false },
+                requirement: { useMaxWidth: false },
+                mindmap: { useMaxWidth: false },
+                gitGraph: { useMaxWidth: false },
+                c4: { useMaxWidth: false },
+                sankey: { useMaxWidth: false },
+                block: { useMaxWidth: false },
+            });
+        }, theme);
+    } catch (setupErr) {
+        // If session setup fails, close the page to avoid resource leaks
+        try { await page.close(); } catch { /* ignore close errors during cleanup */ }
+        throw setupErr;
+    }
+
+    let closed = false;
 
     return {
-        render: (code: string) => renderOnPage(page, code),
+        render: async (code: string) => {
+            if (closed) {
+                throw new Error('Render session is closed');
+            }
+            if (page.isClosed()) {
+                closed = true;
+                throw new Error('Render session page was closed unexpectedly');
+            }
+            return renderOnPage(page, code);
+        },
         close: async () => {
+            if (closed) return;
+            closed = true;
             try {
-                await page.close();
+                if (!page.isClosed()) {
+                    await page.close();
+                }
             } catch (closeErr) {
                 console.error('Warning: Failed to close render session page:',
                     closeErr instanceof Error ? closeErr.message : String(closeErr));
@@ -164,9 +186,22 @@ async function renderOnPage(
                 // Run mermaid on the element
                 try {
                     await mermaid.run({ nodes: [diagramDiv] });
-                } catch (err: any) {
+                } catch (err: unknown) {
+                    // Mermaid may throw Error objects, plain objects with a
+                    // message property, or other values. Extract the most
+                    // useful string representation.
+                    let msg: string;
+                    if (err instanceof Error) {
+                        msg = err.message;
+                    } else if (err && typeof err === 'object' && 'message' in err) {
+                        msg = String((err as { message: unknown }).message);
+                    } else if (typeof err === 'string') {
+                        msg = err;
+                    } else {
+                        try { msg = JSON.stringify(err); } catch { msg = 'unknown error'; }
+                    }
                     throw new Error(
-                        `Failed to render Mermaid diagram: ${err?.message || String(err)}`,
+                        `Failed to render Mermaid diagram: ${msg}`,
                     );
                 }
 

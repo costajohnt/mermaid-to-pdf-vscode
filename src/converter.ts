@@ -1,7 +1,7 @@
 // src/converter.ts
 import { promises as fs } from 'fs';
 import { marked } from 'marked';
-import { createRenderSession } from './mermaidRenderer.js';
+import { createRenderSession, type MermaidRenderSession } from './mermaidRenderer.js';
 import { DiagramCache } from './diagramCache.js';
 import { getBrowser } from './browserManager.js';
 import {
@@ -502,6 +502,11 @@ export class Converter {
         //     For small batches (<=2 diagrams), a single session is faster
         //     because session setup has non-trivial overhead. For larger
         //     batches, multiple sessions render diagrams in parallel.
+        //
+        //     renderErrors is populated here and read in phase (c) to provide
+        //     meaningful error messages in the fallback error box.
+        const renderErrors = new Map<string, Error>();
+
         if (uncachedCodes.size > 0) {
             const codes = [...uncachedCodes];
             // Only use concurrency when there are enough diagrams to justify
@@ -510,14 +515,17 @@ export class Converter {
                 ? 1
                 : Math.min(codes.length, MAX_RENDER_CONCURRENCY);
 
-            // Create the session pool
-            const sessions = await Promise.all(
-                Array.from({ length: concurrency }, () => createRenderSession(mermaidTheme)),
-            );
-
+            // Create sessions one at a time so that already-created sessions
+            // are cleaned up if a later creation fails (avoids resource leaks).
+            const sessions: MermaidRenderSession[] = [];
             try {
+                for (let i = 0; i < concurrency; i++) {
+                    sessions.push(await createRenderSession(mermaidTheme));
+                }
+
                 // Distribute work across sessions via a shared index counter.
-                // Each worker grabs the next code atomically.
+                // JS is single-threaded so the increment between await points
+                // is safe without explicit synchronization.
                 let nextIdx = 0;
                 const renderResults = new Map<string, RenderedDiagram | Error>();
 
@@ -537,14 +545,16 @@ export class Converter {
                     }),
                 );
 
-                // Populate cache with successful renders
+                // Populate cache with successful renders; collect errors for phase (c)
                 for (const [code, result] of renderResults) {
-                    if (!(result instanceof Error)) {
+                    if (result instanceof Error) {
+                        renderErrors.set(code, result);
+                    } else {
                         this.cache.set(code, result, mermaidTheme);
                     }
                 }
             } finally {
-                // Close all sessions
+                // Close all sessions (including partially-created pools)
                 await Promise.all(sessions.map(s => s.close()));
             }
         }
@@ -593,12 +603,14 @@ export class Converter {
                 diagramCount++;
             } else {
                 // Render failed (error was stored during concurrent phase)
-                console.error(`Warning: Mermaid diagram failed to render: diagram not in cache after render phase`);
+                const renderErr = renderErrors.get(mermaidCode);
+                const message = renderErr ? renderErr.message : 'Failed to render Mermaid diagram';
+                console.error(`Warning: Mermaid diagram failed to render: ${message}`);
                 const errorBox = [
                     '<div class="mermaid-error">',
                     '  <h4>Mermaid Diagram (Render Failed)</h4>',
                     `  <pre><code>${escapeHtml(mermaidCode)}</code></pre>`,
-                    '  <p><em>Error: Failed to render Mermaid diagram</em></p>',
+                    `  <p><em>Error: ${escapeHtml(message)}</em></p>`,
                     '</div>',
                 ].join('\n');
                 processed = processed.slice(0, start) + errorBox + processed.slice(end);
