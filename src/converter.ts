@@ -18,6 +18,9 @@ import {
 /** DPI for mm-to-px conversion (CSS reference pixel) */
 const DPI = 96;
 
+/** Maximum number of concurrent render sessions (Puppeteer pages) for diagrams */
+const MAX_RENDER_CONCURRENCY = 4;
+
 /**
  * @deprecated No longer needed -- browser is managed by browserManager.
  * Kept for backward compatibility; callers that still call closePdfBrowser()
@@ -478,80 +481,127 @@ export class Converter {
         const matches = [...markdown.matchAll(MERMAID_REGEX)];
         let diagramCount = 0;
 
-        // 2. Render each diagram to SVG and replace in markdown.
-        //    A single render session is created so that the mermaid library is
-        //    injected only once and the Puppeteer page is reused across diagrams.
-        //    Process matches in reverse index order so that splicing doesn't
-        //    shift the positions of earlier matches. This also correctly handles
-        //    duplicate mermaid code blocks (string.replace would only hit the first).
-        let processed = markdown;
+        // 2. Render diagrams to SVG concurrently, then replace in markdown.
+        //    a) Forward pass: collect unique diagram codes that need rendering.
+        //    b) Render all unique diagrams concurrently (limited concurrency).
+        //    c) Reverse-index pass: splice rendered SVGs into the markdown.
+
         const mermaidTheme = this.options.theme === 'dark' ? 'dark' : 'default';
 
-        // Only create a render session if there are diagrams to render
-        const session = matches.length > 0 ? await createRenderSession(mermaidTheme) : null;
-        try {
-            for (let i = matches.length - 1; i >= 0; i--) {
-                const match = matches[i];
-                const fullMatch = match[0];
-                const mermaidCode = match[1].trim();
-                const start = match.index!;
-                const end = start + fullMatch.length;
-
-                try {
-                    // Check cache first (keyed by code + theme)
-                    let rendered: RenderedDiagram | null = this.cache.get(mermaidCode, mermaidTheme);
-                    if (!rendered) {
-                        rendered = await session!.render(mermaidCode);
-                        this.cache.set(mermaidCode, rendered, mermaidTheme);
-                    }
-
-                    // Scale to fit page width (never upscale). No floor -- SVGs are
-                    // vector so they remain sharp at any scale in PDF viewers.  A
-                    // properly-scaled small diagram is far better than a clipped one.
-                    const scale = Math.min(dims.contentWidth / rendered.width, 1.0);
-
-                    const displayWidth  = Math.round(rendered.width  * scale);
-                    const displayHeight = Math.round(rendered.height * scale);
-
-                    // Determine if the diagram is taller than the page content area
-                    const allowBreak = displayHeight > dims.contentHeight;
-                    const breakClass = allowBreak ? ' allow-break' : '';
-
-                    // For very wide, short diagrams (e.g. flowchart LR), the scaled
-                    // height can be a tiny sliver. Set a minimum container height so
-                    // the diagram is still usable -- the SVG will be centered inside.
-                    const MIN_DIAGRAM_HEIGHT = 120; // px
-                    const containerStyle = displayHeight < MIN_DIAGRAM_HEIGHT
-                        ? ` style="min-height:${MIN_DIAGRAM_HEIGHT}px;display:flex;align-items:center;justify-content:center"`
-                        : '';
-
-                    // Rewrite SVG with display dimensions, preserving renderer's viewBox
-                    const sized = resizeSvg(
-                        rendered.svgString,
-                        displayWidth,
-                        displayHeight,
-                    );
-
-                    const replacement = `<div class="mermaid-diagram${breakClass}"${containerStyle}>${sized}</div>`;
-                    processed = processed.slice(0, start) + replacement + processed.slice(end);
-                    diagramCount++;
-                } catch (err) {
-                    // Render failure: embed error box and continue
-                    const message = err instanceof Error ? err.message : String(err);
-                    console.error(`Warning: Mermaid diagram failed to render: ${message}`);
-                    const errorBox = [
-                        '<div class="mermaid-error">',
-                        '  <h4>Mermaid Diagram (Render Failed)</h4>',
-                        `  <pre><code>${escapeHtml(mermaidCode)}</code></pre>`,
-                        `  <p><em>Error: ${escapeHtml(message)}</em></p>`,
-                        '</div>',
-                    ].join('\n');
-                    processed = processed.slice(0, start) + errorBox + processed.slice(end);
-                }
+        // (a) Collect unique diagram codes that are not already cached
+        const uncachedCodes = new Set<string>();
+        for (const match of matches) {
+            const code = match[1].trim();
+            if (!this.cache.get(code, mermaidTheme)) {
+                uncachedCodes.add(code);
             }
-        } finally {
-            if (session) {
-                await session.close();
+        }
+
+        // (b) Render uncached diagrams using a pool of render sessions.
+        //     Each session owns one Puppeteer page with mermaid pre-loaded.
+        //     For small batches (<=2 diagrams), a single session is faster
+        //     because session setup has non-trivial overhead. For larger
+        //     batches, multiple sessions render diagrams in parallel.
+        if (uncachedCodes.size > 0) {
+            const codes = [...uncachedCodes];
+            // Only use concurrency when there are enough diagrams to justify
+            // the overhead of creating multiple sessions (each ~150ms setup).
+            const concurrency = codes.length <= 2
+                ? 1
+                : Math.min(codes.length, MAX_RENDER_CONCURRENCY);
+
+            // Create the session pool
+            const sessions = await Promise.all(
+                Array.from({ length: concurrency }, () => createRenderSession(mermaidTheme)),
+            );
+
+            try {
+                // Distribute work across sessions via a shared index counter.
+                // Each worker grabs the next code atomically.
+                let nextIdx = 0;
+                const renderResults = new Map<string, RenderedDiagram | Error>();
+
+                await Promise.all(
+                    sessions.map(async (session) => {
+                        while (true) {
+                            const idx = nextIdx++;
+                            if (idx >= codes.length) break;
+                            const code = codes[idx];
+                            try {
+                                const rendered = await session.render(code);
+                                renderResults.set(code, rendered);
+                            } catch (err) {
+                                renderResults.set(code, err instanceof Error ? err : new Error(String(err)));
+                            }
+                        }
+                    }),
+                );
+
+                // Populate cache with successful renders
+                for (const [code, result] of renderResults) {
+                    if (!(result instanceof Error)) {
+                        this.cache.set(code, result, mermaidTheme);
+                    }
+                }
+            } finally {
+                // Close all sessions
+                await Promise.all(sessions.map(s => s.close()));
+            }
+        }
+
+        // (c) Replace mermaid code blocks with rendered SVGs (reverse order
+        //     so splice positions remain valid).
+        let processed = markdown;
+        for (let i = matches.length - 1; i >= 0; i--) {
+            const match = matches[i];
+            const fullMatch = match[0];
+            const mermaidCode = match[1].trim();
+            const start = match.index!;
+            const end = start + fullMatch.length;
+
+            const rendered: RenderedDiagram | null = this.cache.get(mermaidCode, mermaidTheme);
+            if (rendered) {
+                // Scale to fit page width (never upscale). No floor -- SVGs are
+                // vector so they remain sharp at any scale in PDF viewers.  A
+                // properly-scaled small diagram is far better than a clipped one.
+                const scale = Math.min(dims.contentWidth / rendered.width, 1.0);
+
+                const displayWidth  = Math.round(rendered.width  * scale);
+                const displayHeight = Math.round(rendered.height * scale);
+
+                // Determine if the diagram is taller than the page content area
+                const allowBreak = displayHeight > dims.contentHeight;
+                const breakClass = allowBreak ? ' allow-break' : '';
+
+                // For very wide, short diagrams (e.g. flowchart LR), the scaled
+                // height can be a tiny sliver. Set a minimum container height so
+                // the diagram is still usable -- the SVG will be centered inside.
+                const MIN_DIAGRAM_HEIGHT = 120; // px
+                const containerStyle = displayHeight < MIN_DIAGRAM_HEIGHT
+                    ? ` style="min-height:${MIN_DIAGRAM_HEIGHT}px;display:flex;align-items:center;justify-content:center"`
+                    : '';
+
+                // Rewrite SVG with display dimensions, preserving renderer's viewBox
+                const sized = resizeSvg(
+                    rendered.svgString,
+                    displayWidth,
+                    displayHeight,
+                );
+
+                const replacement = `<div class="mermaid-diagram${breakClass}"${containerStyle}>${sized}</div>`;
+                processed = processed.slice(0, start) + replacement + processed.slice(end);
+                diagramCount++;
+            } else {
+                // Render failed (error was stored during concurrent phase)
+                console.error(`Warning: Mermaid diagram failed to render: diagram not in cache after render phase`);
+                const errorBox = [
+                    '<div class="mermaid-error">',
+                    '  <h4>Mermaid Diagram (Render Failed)</h4>',
+                    `  <pre><code>${escapeHtml(mermaidCode)}</code></pre>`,
+                    '  <p><em>Error: Failed to render Mermaid diagram</em></p>',
+                    '</div>',
+                ].join('\n');
+                processed = processed.slice(0, start) + errorBox + processed.slice(end);
             }
         }
 
