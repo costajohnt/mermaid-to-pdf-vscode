@@ -87,8 +87,7 @@ jobs:
       run: npm ci
 
     - name: Check for security vulnerabilities
-      run: npm audit --production
-      continue-on-error: true
+      run: npm audit --production --audit-level=high
 
     - name: TypeScript strict check
       run: npx tsc --noEmit --strict
