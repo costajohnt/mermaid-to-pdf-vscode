@@ -59,16 +59,42 @@ mermaid-to-pdf-mcp/     # MCP server (thin wrapper that shells out to CLI)
 test-fixtures/          # Sample files for testing
 ```
 
-## Rendering Pipeline
+## Architecture
 
-Understanding the pipeline helps when working on the converter:
+### Rendering Pipeline
 
-1. **Parse** -- Markdown is split into text blocks and fenced Mermaid code blocks
-2. **Render** -- Each Mermaid block is rendered to SVG in a headless Chromium page (via Puppeteer), with exact dimensions extracted via `getBBox()`
-3. **Assemble** -- SVGs are embedded in an HTML document, scaled to fit page width (minimum 0.6x scale; tall diagrams overflow across pages)
-4. **PDF** -- Puppeteer's `page.pdf()` generates the final output
+The converter transforms Markdown to PDF through a multi-stage pipeline. The following diagram shows the data flow:
 
-Mermaid is bundled locally (`src/vendor/mermaid.min.js`) so there is no network dependency at render time.
+```mermaid
+flowchart LR
+    A["Markdown\nInput"] --> B["marked\nparser"]
+    B --> C["Extract Mermaid\nblocks"]
+    C --> D["Puppeteer +\nmermaid.js"]
+    D --> E["SVG +\ngetBBox()"]
+    E --> F["Sized HTML\ndocument"]
+    F --> G["page.pdf()"]
+    G --> H["PDF\nOutput"]
+```
+
+**Pipeline stages:**
+
+1. **Parse** -- Markdown is split into text blocks and fenced Mermaid code blocks using a regex pattern.
+2. **Render** -- Each Mermaid block is rendered to SVG in a headless Chromium page (via Puppeteer) using a locally bundled `mermaid.min.js` (no CDN dependency). Exact dimensions are extracted via `getBBox()`.
+3. **Scale** -- SVGs are scaled to fit page width (never upscaled). Tall diagrams overflow across pages.
+4. **Assemble** -- Sized SVGs are embedded in a styled HTML document. Headings are absorbed into diagram containers to prevent orphaning during PDF page breaks.
+5. **PDF** -- A second Puppeteer browser instance generates the final PDF via `page.pdf()`.
+
+### Module Responsibility Map
+
+| File | Responsibility |
+|------|---------------|
+| `src/cli.ts` | CLI entry point -- parses arguments, reads from file or stdin, orchestrates conversion, handles `--json` output |
+| `src/converter.ts` | Main pipeline -- coordinates parsing, rendering, HTML assembly, and PDF generation. Exposes the `Converter` class with `convertFile()` and `convertString()` methods |
+| `src/mermaidRenderer.ts` | Mermaid-to-SVG rendering -- manages a singleton Puppeteer browser, loads bundled `mermaid.min.js`, returns SVG string with measured dimensions |
+| `src/diagramCache.ts` | Diagram caching -- simple in-memory cache keyed by mermaid code + theme, avoids re-rendering duplicate diagrams |
+| `src/types.ts` | Shared types and constants -- `ConversionOptions`, `PageSize`, `RenderedDiagram`, defaults, validation constants, `CliJsonOutput` interface |
+| `src/vendor/mermaid.min.js` | Bundled Mermaid IIFE (v11.x) -- copied from `node_modules` by postinstall script, no network dependency at runtime |
+| `mermaid-to-pdf-mcp/` | MCP server -- thin wrapper that shells out to the CLI binary, exposes `convert_markdown_to_pdf` tool |
 
 ## Submitting a Pull Request
 
