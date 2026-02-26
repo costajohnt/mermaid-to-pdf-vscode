@@ -13,6 +13,7 @@ import {
     PDF_TIMEOUT,
     VALID_THEMES,
     VALID_PAGE_SIZES,
+    VALID_FORMATS,
 } from './types.js';
 
 /** DPI for mm-to-px conversion (CSS reference pixel) */
@@ -396,13 +397,15 @@ ${bodyHtml}
 export interface ConvertFileResult {
     /** Number of mermaid diagrams successfully rendered */
     diagramCount: number;
-    /** Size of the generated PDF in bytes */
+    /** Size of the generated output in bytes */
     fileSize: number;
 }
 
 export interface ConvertStringResult extends ConvertFileResult {
-    /** The generated PDF content */
+    /** The generated PDF content (present when format is 'pdf') */
     pdfBuffer: Buffer;
+    /** The generated HTML content (present when format is 'html') */
+    htmlString?: string;
 }
 
 export class Converter {
@@ -423,6 +426,14 @@ export class Converter {
             !(VALID_PAGE_SIZES as readonly string[]).includes(options.pageSize)) {
             throw new Error(
                 `Invalid pageSize "${options.pageSize}". Must be one of: ${VALID_PAGE_SIZES.join(', ')}.`
+            );
+        }
+
+        // Validate format if provided
+        if (options.format !== undefined &&
+            !(VALID_FORMATS as readonly string[]).includes(options.format)) {
+            throw new Error(
+                `Invalid format "${options.format}". Must be one of: ${VALID_FORMATS.join(', ')}.`
             );
         }
 
@@ -449,28 +460,32 @@ export class Converter {
     // ------------------------------------------------------------------
 
     /**
-     * Convert a markdown file to PDF on disk.
+     * Convert a markdown file to PDF or HTML on disk.
      */
     async convertFile(inputPath: string, outputPath: string): Promise<ConvertFileResult> {
         const markdown = await fs.readFile(inputPath, 'utf-8');
-        const { pdfBuffer, diagramCount } = await this._convert(markdown);
-        await fs.writeFile(outputPath, pdfBuffer);
-        return { diagramCount, fileSize: pdfBuffer.length };
+        const result = await this._convert(markdown);
+        if (result.htmlString !== undefined) {
+            const buf = Buffer.from(result.htmlString, 'utf-8');
+            await fs.writeFile(outputPath, buf);
+            return { diagramCount: result.diagramCount, fileSize: buf.length };
+        }
+        await fs.writeFile(outputPath, result.pdfBuffer);
+        return { diagramCount: result.diagramCount, fileSize: result.pdfBuffer.length };
     }
 
     /**
-     * Convert a markdown string to a PDF Buffer with metadata.
+     * Convert a markdown string to a PDF Buffer (or HTML string) with metadata.
      */
     async convertString(markdown: string): Promise<ConvertStringResult> {
-        const { pdfBuffer, diagramCount } = await this._convert(markdown);
-        return { pdfBuffer, diagramCount, fileSize: pdfBuffer.length };
+        return this._convert(markdown);
     }
 
     // ------------------------------------------------------------------
     // Core pipeline
     // ------------------------------------------------------------------
 
-    private async _convert(markdown: string): Promise<{ pdfBuffer: Buffer; diagramCount: number }> {
+    private async _convert(markdown: string): Promise<ConvertStringResult> {
         if (markdown.length > 10 * 1024 * 1024) {
             throw new Error('Markdown content too large. Maximum size is 10 MB.');
         }
@@ -625,10 +640,21 @@ export class Converter {
         const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
         const fullHtml = buildHtmlDocument(adjustedHtml, this.options.theme);
 
-        // 5. Generate PDF with the shared Puppeteer browser instance
+        // 5. If format is 'html', return the self-contained HTML directly
+        if (this.options.format === 'html') {
+            const htmlBuffer = Buffer.from(fullHtml, 'utf-8');
+            return {
+                pdfBuffer: htmlBuffer,
+                htmlString: fullHtml,
+                diagramCount,
+                fileSize: htmlBuffer.length,
+            };
+        }
+
+        // 6. Generate PDF with the shared Puppeteer browser instance
         const pdfBuffer = await this._generatePdf(fullHtml);
 
-        return { pdfBuffer, diagramCount };
+        return { pdfBuffer, diagramCount, fileSize: pdfBuffer.length };
     }
 
     // ------------------------------------------------------------------

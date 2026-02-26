@@ -33,6 +33,7 @@ export function sanitizeErrorMessage(message: string): string {
 // Option validation
 const VALID_THEMES = new Set(['light', 'dark']);
 const VALID_PAGES = new Set(['A4', 'Letter', 'Legal']);
+const VALID_FORMATS = new Set(['pdf', 'html']);
 
 /**
  * Validate and normalize conversion options from raw MCP input.
@@ -58,6 +59,12 @@ export function validateOptions(raw: unknown): ConversionOptions {
             throw new McpError(ErrorCode.InvalidParams, `Invalid pageSize: ${String(obj.pageSize)}. Must be "A4", "Letter", or "Legal".`);
         }
         opts.pageSize = obj.pageSize as 'A4' | 'Letter' | 'Legal';
+    }
+    if (obj.format !== null && obj.format !== undefined) {
+        if (typeof obj.format !== 'string' || !VALID_FORMATS.has(obj.format)) {
+            throw new McpError(ErrorCode.InvalidParams, `Invalid format: ${String(obj.format)}. Must be "pdf" or "html".`);
+        }
+        opts.format = obj.format as 'pdf' | 'html';
     }
     return opts;
 }

@@ -10,22 +10,24 @@ import type { CliJsonOutput } from './types.js';
 export async function main(argv: string[] = process.argv.slice(2)) {
     if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
         console.log(`
-markdown-mermaid-converter — Convert Markdown with Mermaid diagrams to PDF
+markdown-mermaid-converter — Convert Markdown with Mermaid diagrams to PDF/HTML
 
 Usage:
   markdown-mermaid-converter <input.md> [options]
   cat input.md | markdown-mermaid-converter -o output.pdf
 
 Options:
-  -o, --output <file>   Output PDF file path (default: <input>.pdf)
-  -t, --theme <theme>   light | dark (default: light)
-  -p, --page <size>     A4 | Letter | Legal (default: A4)
-  --json                Output results as JSON to stdout
-  -h, --help            Show this help message
+  -o, --output <file>     Output file path (default: <input>.pdf or <input>.html)
+  -f, --format <format>   pdf | html (default: pdf)
+  -t, --theme <theme>     light | dark (default: light)
+  -p, --page <size>       A4 | Letter | Legal (default: A4)
+  --json                  Output results as JSON to stdout
+  -h, --help              Show this help message
 
 Examples:
   markdown-mermaid-converter document.md
   markdown-mermaid-converter document.md -o output.pdf -t dark
+  markdown-mermaid-converter document.md -f html -o output.html
   markdown-mermaid-converter document.md --json
   cat README.md | markdown-mermaid-converter -o readme.pdf
 `);
@@ -35,6 +37,7 @@ Examples:
     // Parse arguments
     let inputFile: string | null = null;
     let outputFile: string | null = null;
+    let format: 'pdf' | 'html' = 'pdf';
     let theme: 'light' | 'dark' = 'light';
     let pageSize: 'A4' | 'Letter' | 'Legal' = 'A4';
     let jsonOutput = false;
@@ -49,6 +52,20 @@ Examples:
                 }
                 outputFile = argv[++i];
                 break;
+            case '-f':
+            case '--format': {
+                if (i + 1 >= argv.length || argv[i + 1].startsWith('-')) {
+                    console.error('Error: --format requires a value (pdf or html).');
+                    process.exit(1);
+                }
+                const f = argv[++i];
+                if (f !== 'pdf' && f !== 'html') {
+                    console.error(`Error: Invalid format "${f}". Must be "pdf" or "html".`);
+                    process.exit(1);
+                }
+                format = f;
+                break;
+            }
             case '-t':
             case '--theme': {
                 if (i + 1 >= argv.length || argv[i + 1].startsWith('-')) {
@@ -92,15 +109,16 @@ Examples:
 
     try {
         const startTime = Date.now();
-        const converter = new Converter({ theme, pageSize });
+        const ext = format === 'html' ? '.html' : '.pdf';
+        const converter = new Converter({ theme, pageSize, format });
         let markdown: string;
 
         if (inputFile) {
             const resolvedInput = resolve(inputFile);
             if (!outputFile) {
                 outputFile = /\.md$/i.test(resolvedInput)
-                    ? resolvedInput.replace(/\.md$/i, '.pdf')
-                    : resolvedInput + '.pdf';
+                    ? resolvedInput.replace(/\.md$/i, ext)
+                    : resolvedInput + ext;
             }
             markdown = await fs.readFile(resolvedInput, 'utf-8');
         } else if (!process.stdin.isTTY) {

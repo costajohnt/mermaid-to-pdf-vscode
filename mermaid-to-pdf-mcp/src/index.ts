@@ -49,7 +49,7 @@ const server = new Server(
 const TOOLS = {
   convertMarkdownToPdf: {
     name: 'convert_markdown_to_pdf',
-    description: 'Convert Markdown with Mermaid to PDF file',
+    description: 'Convert Markdown with Mermaid to PDF or HTML file',
     inputSchema: {
       type: 'object',
       properties: {
@@ -61,6 +61,7 @@ const TOOLS = {
             outputPath: { type: 'string' },
             theme: { type: 'string', enum: ['light', 'dark'] },
             pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] },
+            format: { type: 'string', enum: ['pdf', 'html'] },
           }
         }
       },
@@ -70,7 +71,7 @@ const TOOLS = {
 
   convertMarkdownToPdfData: {
     name: 'convert_markdown_to_pdf_data',
-    description: 'Convert small Markdown to PDF base64 (short docs only)',
+    description: 'Convert small Markdown to PDF/HTML base64 (short docs only)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -80,7 +81,8 @@ const TOOLS = {
           properties: {
             title: { type: 'string' },
             theme: { type: 'string', enum: ['light', 'dark'] },
-            pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] }
+            pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] },
+            format: { type: 'string', enum: ['pdf', 'html'] },
           }
         }
       },
@@ -90,7 +92,7 @@ const TOOLS = {
 
   convertMarkdownFileToFile: {
     name: 'convert_markdown_file_to_pdf',
-    description: 'Convert MD file to PDF file',
+    description: 'Convert MD file to PDF or HTML file',
     inputSchema: {
       type: 'object',
       properties: {
@@ -100,7 +102,8 @@ const TOOLS = {
           type: 'object',
           properties: {
             theme: { type: 'string', enum: ['light', 'dark'] },
-            pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] }
+            pageSize: { type: 'string', enum: ['A4', 'Letter', 'Legal'] },
+            format: { type: 'string', enum: ['pdf', 'html'] },
           }
         }
       },

@@ -2,9 +2,12 @@
 
 export type PageSize = 'A4' | 'Letter' | 'Legal';
 
+export type OutputFormat = 'pdf' | 'html';
+
 export interface ConversionOptions {
     theme: 'light' | 'dark';
     pageSize: PageSize;
+    format: OutputFormat;
     margins: {
         top: string;
         right: string;
@@ -46,9 +49,13 @@ export const VALID_THEMES = ['light', 'dark'] as const;
 /** Valid page size values for runtime validation */
 export const VALID_PAGE_SIZES = ['A4', 'Letter', 'Legal'] as const;
 
+/** Valid output format values for runtime validation */
+export const VALID_FORMATS = ['pdf', 'html'] as const;
+
 export const DEFAULT_OPTIONS: ConversionOptions = Object.freeze({
     theme: 'light' as const,
     pageSize: 'A4' as const,
+    format: 'pdf' as const,
     margins: Object.freeze({ top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }),
 });
 

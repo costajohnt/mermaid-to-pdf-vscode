@@ -119,12 +119,13 @@ export class MermaidConverter {
             const cliArgs = [inputFile, '-o', outputFile];
             if (options.theme) { cliArgs.push('-t', options.theme); }
             if (options.pageSize) { cliArgs.push('-p', options.pageSize); }
+            if (options.format) { cliArgs.push('-f', options.format); }
 
             const result = await this.runCli(cliArgs);
-            const pdfBuffer = await fs.readFile(outputFile);
+            const outputBuffer = await fs.readFile(outputFile);
 
             return {
-                pdfBase64: pdfBuffer.toString('base64'),
+                pdfBase64: outputBuffer.toString('base64'),
                 metadata: {
                     fileSize: result.fileSize,
                     diagramCount: result.diagramCount,
@@ -151,6 +152,7 @@ export class MermaidConverter {
         const cliArgs = [inputPath, '-o', resolvedOutput];
         if (options.theme) { cliArgs.push('-t', options.theme); }
         if (options.pageSize) { cliArgs.push('-p', options.pageSize); }
+        if (options.format) { cliArgs.push('-f', options.format); }
 
         const result = await this.runCli(cliArgs);
 
