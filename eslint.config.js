@@ -3,39 +3,92 @@ import tsparser from '@typescript-eslint/parser';
 
 const sharedRules = {
     '@typescript-eslint/naming-convention': [
-        'warn',
+        'error',
         {
             selector: 'variable',
             format: ['camelCase', 'PascalCase', 'UPPER_CASE'],
             leadingUnderscore: 'allow',
         },
     ],
-    'curly': 'warn',
-    'eqeqeq': 'warn',
-    'no-throw-literal': 'warn',
-};
-
-const sharedConfig = {
-    languageOptions: {
-        parser: tsparser,
-        ecmaVersion: 2022,
-        sourceType: 'module',
-    },
-    plugins: {
-        '@typescript-eslint': tseslint,
-    },
-    rules: sharedRules,
+    '@typescript-eslint/no-explicit-any': 'error',
+    '@typescript-eslint/no-floating-promises': 'error',
+    'curly': 'error',
+    'eqeqeq': 'error',
+    'no-throw-literal': 'error',
+    'prefer-const': 'error',
 };
 
 export default [
     {
         files: ['src/**/*.ts'],
+        ignores: ['**/*.d.ts', '**/*.test.ts', 'dist/**', 'out/**'],
+        languageOptions: {
+            parser: tsparser,
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            parserOptions: {
+                project: './tsconfig.json',
+            },
+        },
+        plugins: {
+            '@typescript-eslint': tseslint,
+        },
+        rules: sharedRules,
+    },
+    {
+        files: ['src/**/*.test.ts'],
         ignores: ['**/*.d.ts', 'dist/**', 'out/**'],
-        ...sharedConfig,
+        languageOptions: {
+            parser: tsparser,
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            parserOptions: {
+                project: './tsconfig.json',
+            },
+        },
+        plugins: {
+            '@typescript-eslint': tseslint,
+        },
+        rules: {
+            ...sharedRules,
+            // node:test describe/test return promises handled by the runner
+            '@typescript-eslint/no-floating-promises': 'off',
+        },
     },
     {
         files: ['mermaid-to-pdf-mcp/src/**/*.ts'],
+        ignores: ['**/*.d.ts', '**/*.test.ts', '**/dist/**'],
+        languageOptions: {
+            parser: tsparser,
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            parserOptions: {
+                project: './mermaid-to-pdf-mcp/tsconfig.json',
+            },
+        },
+        plugins: {
+            '@typescript-eslint': tseslint,
+        },
+        rules: sharedRules,
+    },
+    {
+        files: ['mermaid-to-pdf-mcp/src/**/*.test.ts'],
         ignores: ['**/*.d.ts', '**/dist/**'],
-        ...sharedConfig,
+        languageOptions: {
+            parser: tsparser,
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            parserOptions: {
+                project: './mermaid-to-pdf-mcp/tsconfig.json',
+            },
+        },
+        plugins: {
+            '@typescript-eslint': tseslint,
+        },
+        rules: {
+            ...sharedRules,
+            // node:test describe/test return promises handled by the runner
+            '@typescript-eslint/no-floating-promises': 'off',
+        },
     },
 ];

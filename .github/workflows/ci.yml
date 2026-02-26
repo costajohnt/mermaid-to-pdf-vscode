@@ -92,6 +92,9 @@ jobs:
     - name: TypeScript strict check
       run: npx tsc --noEmit --strict
 
+    - name: Verify CLI and MCP server versions match
+      run: node scripts/check-versions.js
+
     - name: Check bundle size
       run: |
         npm run build

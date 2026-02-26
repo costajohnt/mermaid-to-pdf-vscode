@@ -533,7 +533,7 @@ export class Converter {
                     sessions.map(async (session) => {
                         while (true) {
                             const idx = nextIdx++;
-                            if (idx >= codes.length) break;
+                            if (idx >= codes.length) { break; }
                             const code = codes[idx];
                             try {
                                 const rendered = await session.render(code);
