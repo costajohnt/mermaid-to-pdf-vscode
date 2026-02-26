@@ -677,7 +677,15 @@ export class Converter {
                 ),
             );
 
-            const pdfPromise = page.pdf({
+            // Determine if headers/footers are active
+            const displayHeaderFooter = !!(
+                this.options.pageNumbers ||
+                this.options.headerTemplate ||
+                this.options.footerTemplate
+            );
+
+            // Build PDF options
+            const pdfOpts: Parameters<typeof page.pdf>[0] = {
                 format: this.options.pageSize,
                 printBackground: true,
                 margin: {
@@ -686,7 +694,52 @@ export class Converter {
                     bottom: this.options.margins.bottom,
                     left:   this.options.margins.left,
                 },
-            });
+            };
+
+            if (displayHeaderFooter) {
+                pdfOpts.displayHeaderFooter = true;
+
+                // Puppeteer requires margins > 0 for headers/footers to render.
+                // Ensure top/bottom margins are at least 15mm when using header/footer.
+                const ensureMinMargin = (value: string, minMm: number): string => {
+                    const match = value.trim().match(/^(\d+(?:\.\d+)?)(mm|cm|in|px)$/);
+                    if (!match) return `${minMm}mm`;
+                    const num = parseFloat(match[1]);
+                    const unit = match[2];
+                    let mm: number;
+                    switch (unit) {
+                        case 'mm': mm = num; break;
+                        case 'cm': mm = num * 10; break;
+                        case 'in': mm = num * 25.4; break;
+                        case 'px': mm = num / (96 / 25.4); break;
+                        default: mm = num;
+                    }
+                    return mm >= minMm ? value : `${minMm}mm`;
+                };
+                pdfOpts.margin!.top = ensureMinMargin(pdfOpts.margin!.top as string, 15);
+                pdfOpts.margin!.bottom = ensureMinMargin(pdfOpts.margin!.bottom as string, 15);
+
+                // Default page number footer template
+                const defaultFooter = '<div style="font-size:9px;width:100%;text-align:center;color:#888;">' +
+                    'Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>';
+
+                if (this.options.headerTemplate) {
+                    pdfOpts.headerTemplate = this.options.headerTemplate;
+                } else {
+                    // Empty header when not specified (Puppeteer requires it when displayHeaderFooter is true)
+                    pdfOpts.headerTemplate = '<span></span>';
+                }
+
+                if (this.options.footerTemplate) {
+                    pdfOpts.footerTemplate = this.options.footerTemplate;
+                } else if (this.options.pageNumbers) {
+                    pdfOpts.footerTemplate = defaultFooter;
+                } else {
+                    pdfOpts.footerTemplate = '<span></span>';
+                }
+            }
+
+            const pdfPromise = page.pdf(pdfOpts);
 
             let timer: ReturnType<typeof setTimeout>;
             const timeoutPromise = new Promise<never>((_resolve, reject) => {

@@ -14,6 +14,12 @@ export interface ConversionOptions {
         bottom: string;
         left: string;
     };
+    /** Show "Page X of Y" centered in the footer */
+    pageNumbers: boolean;
+    /** Custom header HTML template (Puppeteer template variables: pageNumber, totalPages, date, title) */
+    headerTemplate?: string;
+    /** Custom footer HTML template (Puppeteer template variables: pageNumber, totalPages, date, title) */
+    footerTemplate?: string;
 }
 
 /**
@@ -56,6 +62,7 @@ export const DEFAULT_OPTIONS: ConversionOptions = Object.freeze({
     theme: 'light' as const,
     pageSize: 'A4' as const,
     format: 'pdf' as const,
+    pageNumbers: false,
     margins: Object.freeze({ top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }),
 });
 

@@ -21,13 +21,23 @@ Options:
   -f, --format <format>   pdf | html (default: pdf)
   -t, --theme <theme>     light | dark (default: light)
   -p, --page <size>       A4 | Letter | Legal (default: A4)
+  --page-numbers          Add "Page X of Y" footer to PDF output
+  --header <html>         Custom header HTML template for PDF output
+  --footer <html>         Custom footer HTML template for PDF output
   --json                  Output results as JSON to stdout
   -h, --help              Show this help message
+
+Header/Footer Template Variables:
+  <span class="pageNumber"></span>    Current page number
+  <span class="totalPages"></span>    Total page count
+  <span class="date"></span>          Current date
+  <span class="title"></span>         Document title
 
 Examples:
   markdown-mermaid-converter document.md
   markdown-mermaid-converter document.md -o output.pdf -t dark
   markdown-mermaid-converter document.md -f html -o output.html
+  markdown-mermaid-converter document.md --page-numbers
   markdown-mermaid-converter document.md --json
   cat README.md | markdown-mermaid-converter -o readme.pdf
 `);
@@ -40,6 +50,9 @@ Examples:
     let format: 'pdf' | 'html' = 'pdf';
     let theme: 'light' | 'dark' = 'light';
     let pageSize: 'A4' | 'Letter' | 'Legal' = 'A4';
+    let pageNumbers = false;
+    let headerTemplate: string | undefined;
+    let footerTemplate: string | undefined;
     let jsonOutput = false;
 
     for (let i = 0; i < argv.length; i++) {
@@ -94,6 +107,25 @@ Examples:
                 pageSize = p;
                 break;
             }
+            case '--page-numbers':
+                pageNumbers = true;
+                break;
+            case '--header': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --header requires an HTML template string argument.');
+                    process.exit(1);
+                }
+                headerTemplate = argv[++i];
+                break;
+            }
+            case '--footer': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --footer requires an HTML template string argument.');
+                    process.exit(1);
+                }
+                footerTemplate = argv[++i];
+                break;
+            }
             case '--json':
                 jsonOutput = true;
                 break;
@@ -110,7 +142,7 @@ Examples:
     try {
         const startTime = Date.now();
         const ext = format === 'html' ? '.html' : '.pdf';
-        const converter = new Converter({ theme, pageSize, format });
+        const converter = new Converter({ theme, pageSize, format, pageNumbers, headerTemplate, footerTemplate });
         let markdown: string;
 
         if (inputFile) {
