@@ -9,6 +9,17 @@ import { getBrowser, closeBrowser } from './browserManager.js';
 // Re-export closeBrowser so existing callers (tests, cli) keep working.
 export { closeBrowser };
 
+/** Minimal typing for the mermaid global injected into Puppeteer pages. */
+interface MermaidGlobal {
+    initialize(config: Record<string, unknown>): void;
+    run(opts: { nodes: Element[] }): Promise<void>;
+}
+
+/** Extend the browser Window to include the mermaid global. */
+interface WindowWithMermaid extends Window {
+    mermaid?: MermaidGlobal;
+}
+
 const PADDING = 10;
 
 /**
@@ -82,15 +93,17 @@ export async function createRenderSession(theme: string = 'default'): Promise<Me
 
         // Wait for mermaid global to be available
         await page.waitForFunction(
-            () =>
-                typeof (window as any).mermaid !== 'undefined' &&
-                typeof (window as any).mermaid.initialize === 'function',
+            () => {
+                const w = window as unknown as WindowWithMermaid;
+                return typeof w.mermaid !== 'undefined' &&
+                    typeof w.mermaid.initialize === 'function';
+            },
             { timeout: RENDER_TIMEOUT },
         );
 
         // Initialize mermaid once with useMaxWidth: false on ALL diagram types
         await page.evaluate((mermaidTheme: string) => {
-            const mermaid = (window as any).mermaid;
+            const mermaid = (window as unknown as WindowWithMermaid).mermaid!;
             mermaid.initialize({
                 startOnLoad: false,
                 theme: mermaidTheme,
@@ -169,7 +182,7 @@ async function renderOnPage(
     try {
         const result = await page.evaluate(
             async (mermaidCode: string, padding: number) => {
-                const mermaid = (window as any).mermaid;
+                const mermaid = (window as unknown as WindowWithMermaid).mermaid!;
 
                 // Clear previous diagram content from the container
                 const container = document.getElementById('mermaid-container')!;

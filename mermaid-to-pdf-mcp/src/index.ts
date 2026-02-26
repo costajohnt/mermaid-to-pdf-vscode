@@ -123,7 +123,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'convert_markdown_to_pdf': {
-        const { markdown, options: rawOpts = {} } = args as any;
+        const params = args as Record<string, unknown>;
+        const { markdown } = params;
+        const rawOpts = (params.options ?? {}) as Record<string, unknown>;
 
         if (!markdown || typeof markdown !== 'string') {
           throw new McpError(
@@ -142,11 +144,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const validatedOpts = validateOptions(rawOpts);
 
         // Generate a default output path if not provided
-        const title = rawOpts.title || 'Document';
+        const title = typeof rawOpts.title === 'string' ? rawOpts.title : 'Document';
         const safeTitle = title.replace(/[^a-zA-Z0-9\-_]/g, '_').slice(0, 200);
         const defaultPath = path.join(homedir(), 'Desktop', `${safeTitle}.pdf`);
         const outputPath = rawOpts.outputPath
-          ? validatePath(rawOpts.outputPath, 'outputPath')
+          ? validatePath(rawOpts.outputPath as string, 'outputPath')
           : validatePath(defaultPath, 'outputPath');
 
         const result = await converter.convertFileToFileFromContent(markdown, outputPath, validatedOpts);
@@ -166,7 +168,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'convert_markdown_to_pdf_data': {
-        const { markdown, options: rawOpts = {} } = args as any;
+        const params = args as Record<string, unknown>;
+        const { markdown } = params;
+        const rawOpts = (params.options ?? {}) as Record<string, unknown>;
 
         if (!markdown || typeof markdown !== 'string') {
           throw new McpError(
@@ -178,7 +182,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const validatedOpts = validateOptions(rawOpts);
         const result = await converter.convertMarkdownToPdf(markdown, validatedOpts);
 
-        const response: any = {
+        const response: Record<string, unknown> = {
           pdf: result.pdfBase64,
           size: result.metadata.fileSize,
           diagrams: result.metadata.diagramCount
@@ -199,7 +203,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'convert_markdown_file_to_pdf': {
-        const { inputPath, outputPath, options: rawOpts = {} } = args as any;
+        const params = args as Record<string, unknown>;
+        const { inputPath, outputPath } = params;
+        const rawOpts = (params.options ?? {}) as Record<string, unknown>;
 
         if (!inputPath || typeof inputPath !== 'string') {
           throw new McpError(
