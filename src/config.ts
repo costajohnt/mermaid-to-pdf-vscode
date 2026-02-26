@@ -131,15 +131,15 @@ export function mergeConfig(
     const merged: Partial<ConversionOptions> = {};
 
     // Apply config file values
-    if (fileConfig.theme !== undefined) merged.theme = fileConfig.theme;
-    if (fileConfig.pageSize !== undefined) merged.pageSize = fileConfig.pageSize;
+    if (fileConfig.theme !== undefined) { merged.theme = fileConfig.theme; }
+    if (fileConfig.pageSize !== undefined) { merged.pageSize = fileConfig.pageSize; }
     if (fileConfig.margins !== undefined) {
         merged.margins = { ...fileConfig.margins } as ConversionOptions['margins'];
     }
 
     // Apply CLI flags (highest priority — override config file)
-    if (cliFlags.theme !== undefined) merged.theme = cliFlags.theme;
-    if (cliFlags.pageSize !== undefined) merged.pageSize = cliFlags.pageSize;
+    if (cliFlags.theme !== undefined) { merged.theme = cliFlags.theme; }
+    if (cliFlags.pageSize !== undefined) { merged.pageSize = cliFlags.pageSize; }
     if (cliFlags.margins !== undefined) {
         // CLI margins merge on top of config file margins
         merged.margins = { ...(merged.margins ?? {}), ...cliFlags.margins } as ConversionOptions['margins'];
