@@ -26,10 +26,10 @@
     "postinstall": "mkdir -p src/vendor && cp node_modules/mermaid/dist/mermaid.min.js src/vendor/mermaid.min.js",
     "start": "node dist/cli.js",
     "dev": "tsx src/cli.ts",
-    "test": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js dist/diagramTypes.test.js dist/boundary.test.js dist/browserCrash.test.js",
-    "test:coverage": "npm run build && c8 --check-coverage --lines 70 --branches 60 --reporter=text --reporter=lcov node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js dist/diagramTypes.test.js dist/boundary.test.js dist/browserCrash.test.js",
+    "test": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js dist/config.test.js dist/diagramTypes.test.js dist/boundary.test.js dist/browserCrash.test.js",
+    "test:coverage": "npm run build && c8 --check-coverage --lines 70 --branches 60 --reporter=text --reporter=lcov node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js dist/config.test.js dist/diagramTypes.test.js dist/boundary.test.js dist/browserCrash.test.js",
     "test:e2e": "npm run build && node --test dist/e2e.test.js",
-    "test:all": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js dist/diagramTypes.test.js dist/boundary.test.js dist/browserCrash.test.js dist/e2e.test.js && cd mermaid-to-pdf-mcp && npm test",
+    "test:all": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js dist/config.test.js dist/diagramTypes.test.js dist/boundary.test.js dist/browserCrash.test.js dist/e2e.test.js && cd mermaid-to-pdf-mcp && npm test",
     "benchmark": "npx tsx benchmarks/parse.bench.ts",
     "lint": "eslint src/ mermaid-to-pdf-mcp/src/"
   },

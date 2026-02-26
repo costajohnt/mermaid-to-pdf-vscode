@@ -3,6 +3,7 @@ import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { validateOptions, validatePath, sanitizeErrorMessage } from './validation.js';
+import { validateMarkdown } from './validateMarkdown.js';
 import { homedir, tmpdir } from 'os';
 import path from 'path';
 
@@ -274,5 +275,183 @@ describe('sanitizeErrorMessage', () => {
         const msg = 'Root is /';
         const result = sanitizeErrorMessage(msg);
         assert.equal(result, 'Root is /');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// validateMarkdown
+// ---------------------------------------------------------------------------
+describe('validateMarkdown', () => {
+    test('validates a single valid flowchart', () => {
+        const md = '# Doc\n\n```mermaid\nflowchart LR\n    A --> B\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams.length, 1);
+        assert.equal(result.diagrams[0].index, 0);
+        assert.equal(result.diagrams[0].type, 'flowchart');
+        assert.equal(result.diagrams[0].valid, true);
+        assert.equal(result.diagrams[0].error, undefined);
+    });
+
+    test('validates multiple valid diagrams', () => {
+        const md = [
+            '# Test',
+            '',
+            '```mermaid',
+            'flowchart LR',
+            '    A --> B',
+            '```',
+            '',
+            '```mermaid',
+            'sequenceDiagram',
+            '    Alice->>Bob: Hello',
+            '```',
+            '',
+            '```mermaid',
+            'erDiagram',
+            '    CUSTOMER ||--o{ ORDER : places',
+            '```',
+        ].join('\n');
+
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams.length, 3);
+        assert.equal(result.diagrams[0].type, 'flowchart');
+        assert.equal(result.diagrams[1].type, 'sequenceDiagram');
+        assert.equal(result.diagrams[2].type, 'erDiagram');
+        assert.ok(result.diagrams.every(d => d.valid));
+    });
+
+    test('detects unrecognized diagram type', () => {
+        const md = '```mermaid\nfakeChart\n    A --> B\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, false);
+        assert.equal(result.diagrams.length, 1);
+        assert.equal(result.diagrams[0].valid, false);
+        assert.equal(result.diagrams[0].type, 'fakeChart');
+        assert.ok(result.diagrams[0].error);
+        assert.match(result.diagrams[0].error!, /Unrecognized diagram type/);
+    });
+
+    test('handles empty mermaid block', () => {
+        const md = '```mermaid\n\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, false);
+        assert.equal(result.diagrams.length, 1);
+        assert.equal(result.diagrams[0].valid, false);
+        assert.equal(result.diagrams[0].type, null);
+        assert.ok(result.diagrams[0].error);
+    });
+
+    test('returns valid=false when no mermaid blocks exist', () => {
+        const md = '# Just Text\n\nNo diagrams here.\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, false);
+        assert.equal(result.diagrams.length, 0);
+    });
+
+    test('validates graph keyword (alias for flowchart)', () => {
+        const md = '```mermaid\ngraph TD\n    A --> B\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams[0].type, 'graph');
+    });
+
+    test('validates pie chart', () => {
+        const md = '```mermaid\npie\n    "Cats" : 40\n    "Dogs" : 60\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams[0].type, 'pie');
+    });
+
+    test('validates gantt chart', () => {
+        const md = '```mermaid\ngantt\n    title A Gantt\n    section Section\n    A task :a1, 2024-01-01, 30d\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams[0].type, 'gantt');
+    });
+
+    test('validates gitGraph', () => {
+        const md = '```mermaid\ngitGraph\n    commit\n    branch develop\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams[0].type, 'gitGraph');
+    });
+
+    test('validates classDiagram', () => {
+        const md = '```mermaid\nclassDiagram\n    class Animal\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams[0].type, 'classDiagram');
+    });
+
+    test('validates stateDiagram-v2', () => {
+        const md = '```mermaid\nstateDiagram-v2\n    [*] --> Active\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams[0].type, 'stateDiagram-v2');
+    });
+
+    test('handles directives before diagram type', () => {
+        const md = '```mermaid\n%%{init: {"theme": "dark"}}%%\nflowchart LR\n    A --> B\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams[0].type, 'flowchart');
+    });
+
+    test('handles mix of valid and invalid diagrams', () => {
+        const md = [
+            '```mermaid',
+            'flowchart LR',
+            '    A --> B',
+            '```',
+            '',
+            '```mermaid',
+            'notADiagram',
+            '    X --> Y',
+            '```',
+        ].join('\n');
+
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, false);
+        assert.equal(result.diagrams.length, 2);
+        assert.equal(result.diagrams[0].valid, true);
+        assert.equal(result.diagrams[1].valid, false);
+    });
+
+    test('validates mindmap diagram type', () => {
+        const md = '```mermaid\nmindmap\n  root((mindmap))\n    Origins\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams[0].type, 'mindmap');
+    });
+
+    test('validates timeline diagram type', () => {
+        const md = '```mermaid\ntimeline\n    title Timeline\n    2024 : Event A\n```\n';
+        const result = validateMarkdown(md);
+        assert.equal(result.valid, true);
+        assert.equal(result.diagrams[0].type, 'timeline');
+    });
+
+    test('indexes are zero-based and sequential', () => {
+        const md = [
+            '```mermaid',
+            'flowchart LR',
+            '    A --> B',
+            '```',
+            '```mermaid',
+            'pie',
+            '    "A" : 50',
+            '```',
+            '```mermaid',
+            'gantt',
+            '    title G',
+            '```',
+        ].join('\n');
+
+        const result = validateMarkdown(md);
+        assert.equal(result.diagrams[0].index, 0);
+        assert.equal(result.diagrams[1].index, 1);
+        assert.equal(result.diagrams[2].index, 2);
     });
 });

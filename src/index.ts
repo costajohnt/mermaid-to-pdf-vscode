@@ -4,6 +4,8 @@ export type { ConvertFileResult, ConvertStringResult } from './converter.js';
 export { renderMermaidToSvg, createRenderSession, closeBrowser } from './mermaidRenderer.js';
 export type { MermaidRenderSession } from './mermaidRenderer.js';
 export { DiagramCache } from './diagramCache.js';
+export { loadConfigFile, mergeConfig } from './config.js';
+export type { MermaidrcConfig } from './config.js';
 export type {
     ConversionOptions,
     RenderedDiagram,
