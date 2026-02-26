@@ -5,7 +5,8 @@ import { promises as fs } from 'fs';
 import { fileURLToPath } from 'url';
 import { Converter, closePdfBrowser } from './converter.js';
 import { closeBrowser } from './mermaidRenderer.js';
-import type { CliJsonOutput } from './types.js';
+import { loadConfigFile, mergeConfig } from './config.js';
+import type { CliJsonOutput, ConversionOptions } from './types.js';
 
 export async function main(argv: string[] = process.argv.slice(2)) {
     if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
@@ -36,6 +37,10 @@ Header/Footer Template Variables:
   <span class="date"></span>          Current date
   <span class="title"></span>         Document title
 
+Config file:
+  Place a .mermaidrc.json in the current directory or home directory.
+  CLI flags override config file values, which override built-in defaults.
+
 Examples:
   markdown-mermaid-converter document.md
   markdown-mermaid-converter document.md -o output.pdf -t dark
@@ -47,12 +52,12 @@ Examples:
         process.exit(0);
     }
 
-    // Parse arguments
+    // Parse arguments — track which flags were explicitly set by the user
     let inputFile: string | null = null;
     let outputFile: string | null = null;
-    let format: 'pdf' | 'html' = 'pdf';
-    let theme: 'light' | 'dark' = 'light';
-    let pageSize: 'A4' | 'Letter' | 'Legal' = 'A4';
+    let cliFormat: 'pdf' | 'html' | undefined;
+    let cliTheme: 'light' | 'dark' | undefined;
+    let cliPageSize: 'A4' | 'Letter' | 'Legal' | undefined;
     let pageNumbers = false;
     let headerTemplate: string | undefined;
     let footerTemplate: string | undefined;
@@ -82,7 +87,7 @@ Examples:
                     console.error(`Error: Invalid format "${f}". Must be "pdf" or "html".`);
                     process.exit(1);
                 }
-                format = f;
+                cliFormat = f;
                 break;
             }
             case '-t':
@@ -96,7 +101,7 @@ Examples:
                     console.error(`Error: Invalid theme "${t}". Must be "light" or "dark".`);
                     process.exit(1);
                 }
-                theme = t;
+                cliTheme = t;
                 break;
             }
             case '-p':
@@ -110,7 +115,7 @@ Examples:
                     console.error(`Error: Invalid page size "${p}". Must be "A4", "Letter", or "Legal".`);
                     process.exit(1);
                 }
-                pageSize = p;
+                cliPageSize = p;
                 break;
             }
             case '--page-numbers':
@@ -171,8 +176,23 @@ Examples:
 
     try {
         const startTime = Date.now();
-        const ext = format === 'html' ? '.html' : '.pdf';
-        const converter = new Converter({ theme, pageSize, format, pageNumbers, headerTemplate, footerTemplate, customCss, font, codeFont });
+
+        // Load config file (.mermaidrc.json) and merge with CLI flags
+        const fileConfig = loadConfigFile();
+        const cliFlags: Partial<ConversionOptions> = {};
+        if (cliFormat !== undefined) { cliFlags.format = cliFormat; }
+        if (cliTheme !== undefined) { cliFlags.theme = cliTheme; }
+        if (cliPageSize !== undefined) { cliFlags.pageSize = cliPageSize; }
+        if (pageNumbers) { cliFlags.pageNumbers = pageNumbers; }
+        if (headerTemplate) { cliFlags.headerTemplate = headerTemplate; }
+        if (footerTemplate) { cliFlags.footerTemplate = footerTemplate; }
+        if (customCss) { cliFlags.customCss = customCss; }
+        if (font) { cliFlags.font = font; }
+        if (codeFont) { cliFlags.codeFont = codeFont; }
+        const mergedOptions = mergeConfig(fileConfig, cliFlags);
+
+        const ext = (mergedOptions.format ?? 'pdf') === 'html' ? '.html' : '.pdf';
+        const converter = new Converter(mergedOptions);
         let markdown: string;
 
         if (inputFile) {
