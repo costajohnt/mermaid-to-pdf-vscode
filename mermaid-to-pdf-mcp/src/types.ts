@@ -2,6 +2,7 @@ export interface ConversionOptions {
     title?: string;
     theme?: 'light' | 'dark';
     pageSize?: 'A4' | 'Letter' | 'Legal';
+    format?: 'pdf' | 'html';
 }
 
 export interface ConversionResult {

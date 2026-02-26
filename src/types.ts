@@ -2,15 +2,30 @@
 
 export type PageSize = 'A4' | 'Letter' | 'Legal';
 
+export type OutputFormat = 'pdf' | 'html';
+
 export interface ConversionOptions {
     theme: 'light' | 'dark';
     pageSize: PageSize;
+    format: OutputFormat;
     margins: {
         top: string;
         right: string;
         bottom: string;
         left: string;
     };
+    /** Show "Page X of Y" centered in the footer */
+    pageNumbers: boolean;
+    /** Custom header HTML template (Puppeteer template variables: pageNumber, totalPages, date, title) */
+    headerTemplate?: string;
+    /** Custom footer HTML template (Puppeteer template variables: pageNumber, totalPages, date, title) */
+    footerTemplate?: string;
+    /** Custom CSS to inject after the default styles (inline string or file path ending in .css) */
+    customCss?: string;
+    /** Custom font-family for body text */
+    font?: string;
+    /** Custom font-family for code/pre elements */
+    codeFont?: string;
 }
 
 /**
@@ -46,9 +61,14 @@ export const VALID_THEMES = ['light', 'dark'] as const;
 /** Valid page size values for runtime validation */
 export const VALID_PAGE_SIZES = ['A4', 'Letter', 'Legal'] as const;
 
+/** Valid output format values for runtime validation */
+export const VALID_FORMATS = ['pdf', 'html'] as const;
+
 export const DEFAULT_OPTIONS: ConversionOptions = Object.freeze({
     theme: 'light' as const,
     pageSize: 'A4' as const,
+    format: 'pdf' as const,
+    pageNumbers: false,
     margins: Object.freeze({ top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' }),
 });
 

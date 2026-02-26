@@ -10,22 +10,37 @@ import type { CliJsonOutput } from './types.js';
 export async function main(argv: string[] = process.argv.slice(2)) {
     if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
         console.log(`
-markdown-mermaid-converter — Convert Markdown with Mermaid diagrams to PDF
+markdown-mermaid-converter — Convert Markdown with Mermaid diagrams to PDF/HTML
 
 Usage:
   markdown-mermaid-converter <input.md> [options]
   cat input.md | markdown-mermaid-converter -o output.pdf
 
 Options:
-  -o, --output <file>   Output PDF file path (default: <input>.pdf)
-  -t, --theme <theme>   light | dark (default: light)
-  -p, --page <size>     A4 | Letter | Legal (default: A4)
-  --json                Output results as JSON to stdout
-  -h, --help            Show this help message
+  -o, --output <file>     Output file path (default: <input>.pdf or <input>.html)
+  -f, --format <format>   pdf | html (default: pdf)
+  -t, --theme <theme>     light | dark (default: light)
+  -p, --page <size>       A4 | Letter | Legal (default: A4)
+  --page-numbers          Add "Page X of Y" footer to PDF output
+  --header <html>         Custom header HTML template for PDF output
+  --footer <html>         Custom footer HTML template for PDF output
+  --css <css|file.css>    Inject custom CSS (inline string or .css file path)
+  --font <family>         Set body text font-family (falls back gracefully)
+  --code-font <family>    Set code/pre font-family (falls back gracefully)
+  --json                  Output results as JSON to stdout
+  -h, --help              Show this help message
+
+Header/Footer Template Variables:
+  <span class="pageNumber"></span>    Current page number
+  <span class="totalPages"></span>    Total page count
+  <span class="date"></span>          Current date
+  <span class="title"></span>         Document title
 
 Examples:
   markdown-mermaid-converter document.md
   markdown-mermaid-converter document.md -o output.pdf -t dark
+  markdown-mermaid-converter document.md -f html -o output.html
+  markdown-mermaid-converter document.md --page-numbers
   markdown-mermaid-converter document.md --json
   cat README.md | markdown-mermaid-converter -o readme.pdf
 `);
@@ -35,8 +50,15 @@ Examples:
     // Parse arguments
     let inputFile: string | null = null;
     let outputFile: string | null = null;
+    let format: 'pdf' | 'html' = 'pdf';
     let theme: 'light' | 'dark' = 'light';
     let pageSize: 'A4' | 'Letter' | 'Legal' = 'A4';
+    let pageNumbers = false;
+    let headerTemplate: string | undefined;
+    let footerTemplate: string | undefined;
+    let customCss: string | undefined;
+    let font: string | undefined;
+    let codeFont: string | undefined;
     let jsonOutput = false;
 
     for (let i = 0; i < argv.length; i++) {
@@ -49,6 +71,20 @@ Examples:
                 }
                 outputFile = argv[++i];
                 break;
+            case '-f':
+            case '--format': {
+                if (i + 1 >= argv.length || argv[i + 1].startsWith('-')) {
+                    console.error('Error: --format requires a value (pdf or html).');
+                    process.exit(1);
+                }
+                const f = argv[++i];
+                if (f !== 'pdf' && f !== 'html') {
+                    console.error(`Error: Invalid format "${f}". Must be "pdf" or "html".`);
+                    process.exit(1);
+                }
+                format = f;
+                break;
+            }
             case '-t':
             case '--theme': {
                 if (i + 1 >= argv.length || argv[i + 1].startsWith('-')) {
@@ -77,6 +113,49 @@ Examples:
                 pageSize = p;
                 break;
             }
+            case '--page-numbers':
+                pageNumbers = true;
+                break;
+            case '--header': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --header requires an HTML template string argument.');
+                    process.exit(1);
+                }
+                headerTemplate = argv[++i];
+                break;
+            }
+            case '--footer': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --footer requires an HTML template string argument.');
+                    process.exit(1);
+                }
+                footerTemplate = argv[++i];
+                break;
+            }
+            case '--css': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --css requires a CSS string or .css file path argument.');
+                    process.exit(1);
+                }
+                customCss = argv[++i];
+                break;
+            }
+            case '--font': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --font requires a font-family name argument.');
+                    process.exit(1);
+                }
+                font = argv[++i];
+                break;
+            }
+            case '--code-font': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --code-font requires a font-family name argument.');
+                    process.exit(1);
+                }
+                codeFont = argv[++i];
+                break;
+            }
             case '--json':
                 jsonOutput = true;
                 break;
@@ -92,15 +171,16 @@ Examples:
 
     try {
         const startTime = Date.now();
-        const converter = new Converter({ theme, pageSize });
+        const ext = format === 'html' ? '.html' : '.pdf';
+        const converter = new Converter({ theme, pageSize, format, pageNumbers, headerTemplate, footerTemplate, customCss, font, codeFont });
         let markdown: string;
 
         if (inputFile) {
             const resolvedInput = resolve(inputFile);
             if (!outputFile) {
                 outputFile = /\.md$/i.test(resolvedInput)
-                    ? resolvedInput.replace(/\.md$/i, '.pdf')
-                    : resolvedInput + '.pdf';
+                    ? resolvedInput.replace(/\.md$/i, ext)
+                    : resolvedInput + ext;
             }
             markdown = await fs.readFile(resolvedInput, 'utf-8');
         } else if (!process.stdin.isTTY) {

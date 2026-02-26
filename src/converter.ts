@@ -13,6 +13,7 @@ import {
     PDF_TIMEOUT,
     VALID_THEMES,
     VALID_PAGE_SIZES,
+    VALID_FORMATS,
 } from './types.js';
 
 /** DPI for mm-to-px conversion (CSS reference pixel) */
@@ -107,6 +108,24 @@ function resizeSvg(svgString: string, displayWidth: number, displayHeight: numbe
 }
 
 /**
+ * Build a <style> block for custom font overrides.
+ * Falls back gracefully via CSS font stacks — if the specified font is
+ * not available the browser picks the next in the stack.
+ */
+function buildFontStyle(font?: string, codeFont?: string): string {
+    if (!font && !codeFont) { return ''; }
+    const rules: string[] = [];
+    if (font) {
+        // Prepend the user font to the default stack so it falls back gracefully
+        rules.push(`        body { font-family: '${font}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }`);
+    }
+    if (codeFont) {
+        rules.push(`        code, pre { font-family: '${codeFont}', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }`);
+    }
+    return `\n    <style>\n        /* Font overrides */\n${rules.join('\n')}\n    </style>`;
+}
+
+/**
  * Escape HTML special characters in a string.
  */
 function escapeHtml(str: string): string {
@@ -150,7 +169,15 @@ function attachHeadingsToDiagrams(html: string): string {
 // HTML document template
 // ---------------------------------------------------------------------------
 
-function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark'): string {
+interface HtmlDocumentOptions {
+    theme: 'light' | 'dark';
+    customCss?: string;
+    font?: string;
+    codeFont?: string;
+}
+
+function buildHtmlDocument(bodyHtml: string, opts: HtmlDocumentOptions): string {
+    const { theme, customCss, font, codeFont } = opts;
     const isDark = theme === 'dark';
     const bg        = isDark ? '#0d1117' : '#ffffff';
     const fg        = isDark ? '#e6edf3' : '#24292e';
@@ -381,7 +408,7 @@ function buildHtmlDocument(bodyHtml: string, theme: 'light' | 'dark'): string {
                 max-width: none;
             }
         }
-    </style>
+    </style>${buildFontStyle(font, codeFont)}${customCss ? `\n    <style>\n        /* User custom CSS */\n${customCss.split('\n').map(l => '        ' + l).join('\n')}\n    </style>` : ''}
 </head>
 <body>
 ${bodyHtml}
@@ -396,13 +423,15 @@ ${bodyHtml}
 export interface ConvertFileResult {
     /** Number of mermaid diagrams successfully rendered */
     diagramCount: number;
-    /** Size of the generated PDF in bytes */
+    /** Size of the generated output in bytes */
     fileSize: number;
 }
 
 export interface ConvertStringResult extends ConvertFileResult {
-    /** The generated PDF content */
+    /** The generated PDF content (present when format is 'pdf') */
     pdfBuffer: Buffer;
+    /** The generated HTML content (present when format is 'html') */
+    htmlString?: string;
 }
 
 export class Converter {
@@ -423,6 +452,14 @@ export class Converter {
             !(VALID_PAGE_SIZES as readonly string[]).includes(options.pageSize)) {
             throw new Error(
                 `Invalid pageSize "${options.pageSize}". Must be one of: ${VALID_PAGE_SIZES.join(', ')}.`
+            );
+        }
+
+        // Validate format if provided
+        if (options.format !== undefined &&
+            !(VALID_FORMATS as readonly string[]).includes(options.format)) {
+            throw new Error(
+                `Invalid format "${options.format}". Must be one of: ${VALID_FORMATS.join(', ')}.`
             );
         }
 
@@ -449,28 +486,32 @@ export class Converter {
     // ------------------------------------------------------------------
 
     /**
-     * Convert a markdown file to PDF on disk.
+     * Convert a markdown file to PDF or HTML on disk.
      */
     async convertFile(inputPath: string, outputPath: string): Promise<ConvertFileResult> {
         const markdown = await fs.readFile(inputPath, 'utf-8');
-        const { pdfBuffer, diagramCount } = await this._convert(markdown);
-        await fs.writeFile(outputPath, pdfBuffer);
-        return { diagramCount, fileSize: pdfBuffer.length };
+        const result = await this._convert(markdown);
+        if (result.htmlString !== undefined) {
+            const buf = Buffer.from(result.htmlString, 'utf-8');
+            await fs.writeFile(outputPath, buf);
+            return { diagramCount: result.diagramCount, fileSize: buf.length };
+        }
+        await fs.writeFile(outputPath, result.pdfBuffer);
+        return { diagramCount: result.diagramCount, fileSize: result.pdfBuffer.length };
     }
 
     /**
-     * Convert a markdown string to a PDF Buffer with metadata.
+     * Convert a markdown string to a PDF Buffer (or HTML string) with metadata.
      */
     async convertString(markdown: string): Promise<ConvertStringResult> {
-        const { pdfBuffer, diagramCount } = await this._convert(markdown);
-        return { pdfBuffer, diagramCount, fileSize: pdfBuffer.length };
+        return this._convert(markdown);
     }
 
     // ------------------------------------------------------------------
     // Core pipeline
     // ------------------------------------------------------------------
 
-    private async _convert(markdown: string): Promise<{ pdfBuffer: Buffer; diagramCount: number }> {
+    private async _convert(markdown: string): Promise<ConvertStringResult> {
         if (markdown.length > 10 * 1024 * 1024) {
             throw new Error('Markdown content too large. Maximum size is 10 MB.');
         }
@@ -620,15 +661,41 @@ export class Converter {
         // 3. Convert processed markdown to HTML via marked (GFM)
         const bodyHtml = await marked(processed, { gfm: true });
 
-        // 4. Move headings inside their adjacent diagram containers so
+        // 4. Resolve custom CSS (file path or inline string)
+        let resolvedCss: string | undefined;
+        if (this.options.customCss) {
+            if (this.options.customCss.endsWith('.css')) {
+                resolvedCss = await fs.readFile(this.options.customCss, 'utf-8');
+            } else {
+                resolvedCss = this.options.customCss;
+            }
+        }
+
+        // 5. Move headings inside their adjacent diagram containers so
         //    Chromium's PDF renderer can't orphan them on a prior page.
         const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
-        const fullHtml = buildHtmlDocument(adjustedHtml, this.options.theme);
+        const fullHtml = buildHtmlDocument(adjustedHtml, {
+            theme: this.options.theme,
+            customCss: resolvedCss,
+            font: this.options.font,
+            codeFont: this.options.codeFont,
+        });
 
-        // 5. Generate PDF with the shared Puppeteer browser instance
+        // 6. If format is 'html', return the self-contained HTML directly
+        if (this.options.format === 'html') {
+            const htmlBuffer = Buffer.from(fullHtml, 'utf-8');
+            return {
+                pdfBuffer: htmlBuffer,
+                htmlString: fullHtml,
+                diagramCount,
+                fileSize: htmlBuffer.length,
+            };
+        }
+
+        // 7. Generate PDF with the shared Puppeteer browser instance
         const pdfBuffer = await this._generatePdf(fullHtml);
 
-        return { pdfBuffer, diagramCount };
+        return { pdfBuffer, diagramCount, fileSize: pdfBuffer.length };
     }
 
     // ------------------------------------------------------------------
@@ -651,7 +718,15 @@ export class Converter {
                 ),
             );
 
-            const pdfPromise = page.pdf({
+            // Determine if headers/footers are active
+            const displayHeaderFooter = !!(
+                this.options.pageNumbers ||
+                this.options.headerTemplate ||
+                this.options.footerTemplate
+            );
+
+            // Build PDF options
+            const pdfOpts: Parameters<typeof page.pdf>[0] = {
                 format: this.options.pageSize,
                 printBackground: true,
                 margin: {
@@ -660,7 +735,52 @@ export class Converter {
                     bottom: this.options.margins.bottom,
                     left:   this.options.margins.left,
                 },
-            });
+            };
+
+            if (displayHeaderFooter) {
+                pdfOpts.displayHeaderFooter = true;
+
+                // Puppeteer requires margins > 0 for headers/footers to render.
+                // Ensure top/bottom margins are at least 15mm when using header/footer.
+                const ensureMinMargin = (value: string, minMm: number): string => {
+                    const match = value.trim().match(/^(\d+(?:\.\d+)?)(mm|cm|in|px)$/);
+                    if (!match) { return `${minMm}mm`; }
+                    const num = parseFloat(match[1]);
+                    const unit = match[2];
+                    let mm: number;
+                    switch (unit) {
+                        case 'mm': mm = num; break;
+                        case 'cm': mm = num * 10; break;
+                        case 'in': mm = num * 25.4; break;
+                        case 'px': mm = num / (96 / 25.4); break;
+                        default: mm = num;
+                    }
+                    return mm >= minMm ? value : `${minMm}mm`;
+                };
+                pdfOpts.margin!.top = ensureMinMargin(pdfOpts.margin!.top as string, 15);
+                pdfOpts.margin!.bottom = ensureMinMargin(pdfOpts.margin!.bottom as string, 15);
+
+                // Default page number footer template
+                const defaultFooter = '<div style="font-size:9px;width:100%;text-align:center;color:#888;">' +
+                    'Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>';
+
+                if (this.options.headerTemplate) {
+                    pdfOpts.headerTemplate = this.options.headerTemplate;
+                } else {
+                    // Empty header when not specified (Puppeteer requires it when displayHeaderFooter is true)
+                    pdfOpts.headerTemplate = '<span></span>';
+                }
+
+                if (this.options.footerTemplate) {
+                    pdfOpts.footerTemplate = this.options.footerTemplate;
+                } else if (this.options.pageNumbers) {
+                    pdfOpts.footerTemplate = defaultFooter;
+                } else {
+                    pdfOpts.footerTemplate = '<span></span>';
+                }
+            }
+
+            const pdfPromise = page.pdf(pdfOpts);
 
             let timer: ReturnType<typeof setTimeout>;
             const timeoutPromise = new Promise<never>((_resolve, reject) => {
