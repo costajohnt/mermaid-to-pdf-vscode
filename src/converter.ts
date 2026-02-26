@@ -1,9 +1,9 @@
 // src/converter.ts
 import { promises as fs } from 'fs';
 import { marked } from 'marked';
-import puppeteer, { type Browser } from 'puppeteer';
-import { renderMermaidToSvg } from './mermaidRenderer.js';
+import { createRenderSession, type MermaidRenderSession } from './mermaidRenderer.js';
 import { DiagramCache } from './diagramCache.js';
+import { getBrowser } from './browserManager.js';
 import {
     ConversionOptions,
     DEFAULT_OPTIONS,
@@ -13,55 +13,22 @@ import {
     PDF_TIMEOUT,
     VALID_THEMES,
     VALID_PAGE_SIZES,
-    getBrowserArgs,
 } from './types.js';
 
 /** DPI for mm-to-px conversion (CSS reference pixel) */
 const DPI = 96;
 
-// ---------------------------------------------------------------------------
-// PDF browser singleton (separate from the mermaid renderer singleton)
-// ---------------------------------------------------------------------------
-let pdfBrowserInstance: Browser | null = null;
-let pdfBrowserLaunchPromise: Promise<Browser> | null = null;
+/** Maximum number of concurrent render sessions (Puppeteer pages) for diagrams */
+const MAX_RENDER_CONCURRENCY = 4;
 
-async function getPdfBrowser(): Promise<Browser> {
-    if (pdfBrowserInstance && pdfBrowserInstance.connected) {
-        return pdfBrowserInstance;
-    }
-    if (pdfBrowserLaunchPromise) {
-        return pdfBrowserLaunchPromise;
-    }
-    pdfBrowserLaunchPromise = puppeteer.launch({
-        headless: true,
-        args: getBrowserArgs(),
-    }).then(browser => {
-        pdfBrowserInstance = browser;
-        pdfBrowserLaunchPromise = null;
-        return browser;
-    }).catch(err => {
-        pdfBrowserLaunchPromise = null;
-        throw err;
-    });
-    return pdfBrowserLaunchPromise;
-}
-
+/**
+ * @deprecated No longer needed -- browser is managed by browserManager.
+ * Kept for backward compatibility; callers that still call closePdfBrowser()
+ * (tests, CLI) will simply no-op.
+ */
 export async function closePdfBrowser(): Promise<void> {
-    if (pdfBrowserLaunchPromise) {
-        try {
-            await pdfBrowserLaunchPromise;
-        } catch {
-            // launch failed — nothing to close
-        }
-    }
-    if (pdfBrowserInstance) {
-        try {
-            await pdfBrowserInstance.close();
-        } catch (err) {
-            console.error('Warning: Failed to close PDF browser:', err instanceof Error ? err.message : String(err));
-        }
-        pdfBrowserInstance = null;
-    }
+    // No-op: the shared browser in browserManager.ts is closed via
+    // closeBrowser() from mermaidRenderer.ts / browserManager.ts.
 }
 
 /** Mermaid fenced code block pattern */
@@ -514,12 +481,87 @@ export class Converter {
         const matches = [...markdown.matchAll(MERMAID_REGEX)];
         let diagramCount = 0;
 
-        // 2. Render each diagram to SVG and replace in markdown
-        //    Process matches in reverse index order so that splicing doesn't
-        //    shift the positions of earlier matches. This also correctly handles
-        //    duplicate mermaid code blocks (string.replace would only hit the first).
-        let processed = markdown;
+        // 2. Render diagrams to SVG concurrently, then replace in markdown.
+        //    a) Forward pass: collect unique diagram codes that need rendering.
+        //    b) Render all unique diagrams concurrently (limited concurrency).
+        //    c) Reverse-index pass: splice rendered SVGs into the markdown.
+
         const mermaidTheme = this.options.theme === 'dark' ? 'dark' : 'default';
+
+        // (a) Collect unique diagram codes that are not already cached
+        const uncachedCodes = new Set<string>();
+        for (const match of matches) {
+            const code = match[1].trim();
+            if (!this.cache.get(code, mermaidTheme)) {
+                uncachedCodes.add(code);
+            }
+        }
+
+        // (b) Render uncached diagrams using a pool of render sessions.
+        //     Each session owns one Puppeteer page with mermaid pre-loaded.
+        //     For small batches (<=2 diagrams), a single session is faster
+        //     because session setup has non-trivial overhead. For larger
+        //     batches, multiple sessions render diagrams in parallel.
+        //
+        //     renderErrors is populated here and read in phase (c) to provide
+        //     meaningful error messages in the fallback error box.
+        const renderErrors = new Map<string, Error>();
+
+        if (uncachedCodes.size > 0) {
+            const codes = [...uncachedCodes];
+            // Only use concurrency when there are enough diagrams to justify
+            // the overhead of creating multiple sessions (each ~150ms setup).
+            const concurrency = codes.length <= 2
+                ? 1
+                : Math.min(codes.length, MAX_RENDER_CONCURRENCY);
+
+            // Create sessions one at a time so that already-created sessions
+            // are cleaned up if a later creation fails (avoids resource leaks).
+            const sessions: MermaidRenderSession[] = [];
+            try {
+                for (let i = 0; i < concurrency; i++) {
+                    sessions.push(await createRenderSession(mermaidTheme));
+                }
+
+                // Distribute work across sessions via a shared index counter.
+                // JS is single-threaded so the increment between await points
+                // is safe without explicit synchronization.
+                let nextIdx = 0;
+                const renderResults = new Map<string, RenderedDiagram | Error>();
+
+                await Promise.all(
+                    sessions.map(async (session) => {
+                        while (true) {
+                            const idx = nextIdx++;
+                            if (idx >= codes.length) break;
+                            const code = codes[idx];
+                            try {
+                                const rendered = await session.render(code);
+                                renderResults.set(code, rendered);
+                            } catch (err) {
+                                renderResults.set(code, err instanceof Error ? err : new Error(String(err)));
+                            }
+                        }
+                    }),
+                );
+
+                // Populate cache with successful renders; collect errors for phase (c)
+                for (const [code, result] of renderResults) {
+                    if (result instanceof Error) {
+                        renderErrors.set(code, result);
+                    } else {
+                        this.cache.set(code, result, mermaidTheme);
+                    }
+                }
+            } finally {
+                // Close all sessions (including partially-created pools)
+                await Promise.all(sessions.map(s => s.close()));
+            }
+        }
+
+        // (c) Replace mermaid code blocks with rendered SVGs (reverse order
+        //     so splice positions remain valid).
+        let processed = markdown;
         for (let i = matches.length - 1; i >= 0; i--) {
             const match = matches[i];
             const fullMatch = match[0];
@@ -527,15 +569,9 @@ export class Converter {
             const start = match.index!;
             const end = start + fullMatch.length;
 
-            try {
-                // Check cache first (keyed by code + theme)
-                let rendered: RenderedDiagram | null = this.cache.get(mermaidCode, mermaidTheme);
-                if (!rendered) {
-                    rendered = await renderMermaidToSvg(mermaidCode, mermaidTheme);
-                    this.cache.set(mermaidCode, rendered, mermaidTheme);
-                }
-
-                // Scale to fit page width (never upscale). No floor — SVGs are
+            const rendered: RenderedDiagram | null = this.cache.get(mermaidCode, mermaidTheme);
+            if (rendered) {
+                // Scale to fit page width (never upscale). No floor -- SVGs are
                 // vector so they remain sharp at any scale in PDF viewers.  A
                 // properly-scaled small diagram is far better than a clipped one.
                 const scale = Math.min(dims.contentWidth / rendered.width, 1.0);
@@ -549,7 +585,7 @@ export class Converter {
 
                 // For very wide, short diagrams (e.g. flowchart LR), the scaled
                 // height can be a tiny sliver. Set a minimum container height so
-                // the diagram is still usable — the SVG will be centered inside.
+                // the diagram is still usable -- the SVG will be centered inside.
                 const MIN_DIAGRAM_HEIGHT = 120; // px
                 const containerStyle = displayHeight < MIN_DIAGRAM_HEIGHT
                     ? ` style="min-height:${MIN_DIAGRAM_HEIGHT}px;display:flex;align-items:center;justify-content:center"`
@@ -565,9 +601,10 @@ export class Converter {
                 const replacement = `<div class="mermaid-diagram${breakClass}"${containerStyle}>${sized}</div>`;
                 processed = processed.slice(0, start) + replacement + processed.slice(end);
                 diagramCount++;
-            } catch (err) {
-                // Render failure: embed error box and continue
-                const message = err instanceof Error ? err.message : String(err);
+            } else {
+                // Render failed (error was stored during concurrent phase)
+                const renderErr = renderErrors.get(mermaidCode);
+                const message = renderErr ? renderErr.message : 'Failed to render Mermaid diagram';
                 console.error(`Warning: Mermaid diagram failed to render: ${message}`);
                 const errorBox = [
                     '<div class="mermaid-error">',
@@ -588,18 +625,18 @@ export class Converter {
         const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
         const fullHtml = buildHtmlDocument(adjustedHtml, this.options.theme);
 
-        // 5. Generate PDF with a dedicated Puppeteer browser instance
+        // 5. Generate PDF with the shared Puppeteer browser instance
         const pdfBuffer = await this._generatePdf(fullHtml);
 
         return { pdfBuffer, diagramCount };
     }
 
     // ------------------------------------------------------------------
-    // PDF generation (own browser, separate from the renderer singleton)
+    // PDF generation (shared browser via browserManager)
     // ------------------------------------------------------------------
 
     private async _generatePdf(html: string): Promise<Buffer> {
-        const browser = await getPdfBrowser();
+        const browser = await getBrowser();
         const page = await browser.newPage();
 
         try {
