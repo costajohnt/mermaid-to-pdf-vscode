@@ -289,6 +289,7 @@ Examples:
 /**
  * Expand input patterns (glob patterns and literal file paths) into a
  * deduplicated list of resolved file paths.
+ * @throws {Error} If a literal path does not exist or a glob pattern fails.
  */
 async function expandInputPatterns(patterns: string[]): Promise<string[]> {
     if (patterns.length === 0) { return []; }
@@ -360,7 +361,7 @@ async function runSingle(
 
     const markdown = await fs.readFile(resolvedInput, 'utf-8');
     const result = await converter.convertString(markdown);
-    await fs.writeFile(resolvedOutput, result.pdfBuffer);
+    await fs.writeFile(resolvedOutput, result.outputBuffer);
 
     if (jsonOutput) {
         const output: CliJsonOutput = {
@@ -388,7 +389,7 @@ async function runSingle(
                 try {
                     const md = await fs.readFile(resolvedInput, 'utf-8');
                     const rebuildResult = await converter.convertString(md);
-                    await fs.writeFile(resolvedOutput, rebuildResult.pdfBuffer);
+                    await fs.writeFile(resolvedOutput, rebuildResult.outputBuffer);
                     consecutiveFailures = 0;
                     const time = new Date().toLocaleTimeString();
                     const size = (rebuildResult.fileSize / 1024).toFixed(1);
@@ -457,7 +458,7 @@ async function runSingleStdin(
 
     const converter = new Converter(mergedOptions);
     const result = await converter.convertString(markdown);
-    await fs.writeFile(resolvedOutput, result.pdfBuffer);
+    await fs.writeFile(resolvedOutput, result.outputBuffer);
 
     if (jsonOutput) {
         const output: CliJsonOutput = {
@@ -535,7 +536,7 @@ async function runBatch(
         try {
             const markdown = await fs.readFile(file, 'utf-8');
             const result = await converter.convertString(markdown);
-            await fs.writeFile(outputPath, result.pdfBuffer);
+            await fs.writeFile(outputPath, result.outputBuffer);
 
             if (!jsonOutput) {
                 console.error(`  → ${outputPath} (${(result.fileSize / 1024).toFixed(1)} KB)`);

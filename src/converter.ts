@@ -513,7 +513,7 @@ export interface ConvertFileResult {
 
 export interface ConvertStringResult extends ConvertFileResult {
     /** The generated output content as a Buffer (PDF, HTML, or DOCX depending on format) */
-    pdfBuffer: Buffer;
+    outputBuffer: Buffer;
     /** The generated HTML content (present when format is 'html') */
     htmlString?: string;
 }
@@ -588,8 +588,8 @@ export class Converter {
             await fs.writeFile(outputPath, buf);
             return { diagramCount: result.diagramCount, fileSize: buf.length };
         }
-        await fs.writeFile(outputPath, result.pdfBuffer);
-        return { diagramCount: result.diagramCount, fileSize: result.pdfBuffer.length };
+        await fs.writeFile(outputPath, result.outputBuffer);
+        return { diagramCount: result.diagramCount, fileSize: result.outputBuffer.length };
     }
 
     /**
@@ -784,8 +784,8 @@ export class Converter {
             }
         }
 
-        // 5. Move headings inside their adjacent diagram containers so
-        //    Chromium's PDF renderer can't orphan them on a prior page.
+        // 5. Move headings inside their adjacent diagram containers (div or figure)
+        //    so Chromium's PDF renderer can't orphan them on a prior page.
         const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
         const fullHtml = buildHtmlDocument(adjustedHtml, {
             theme: this.options.theme,
@@ -800,7 +800,7 @@ export class Converter {
         if (this.options.format === 'html') {
             const htmlBuffer = Buffer.from(fullHtml, 'utf-8');
             return {
-                pdfBuffer: htmlBuffer,
+                outputBuffer: htmlBuffer,
                 htmlString: fullHtml,
                 diagramCount,
                 fileSize: htmlBuffer.length,
@@ -824,16 +824,16 @@ export class Converter {
             }
             const docxBuffer = Buffer.from(docxArrayBuffer);
             return {
-                pdfBuffer: docxBuffer,
+                outputBuffer: docxBuffer,
                 diagramCount,
                 fileSize: docxBuffer.length,
             };
         }
 
         // 7. Generate PDF with the shared Puppeteer browser instance
-        const pdfBuffer = await this._generatePdf(fullHtml);
+        const outputBuffer = await this._generatePdf(fullHtml);
 
-        return { pdfBuffer, diagramCount, fileSize: pdfBuffer.length };
+        return { outputBuffer, diagramCount, fileSize: outputBuffer.length };
     }
 
     // ------------------------------------------------------------------

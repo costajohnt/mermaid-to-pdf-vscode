@@ -19,7 +19,7 @@ describe('KaTeX Math Rendering', () => {
         const converter = new Converter();
         const md = '# Test\n\nInline math: $E = mc^2$\n';
         const result = await converter.convertString(md);
-        assert.ok(result.pdfBuffer.length > 0);
+        assert.ok(result.outputBuffer.length > 0);
     });
 
     test('inline math ($...$) renders KaTeX HTML when math is enabled', async () => {

@@ -74,7 +74,7 @@ export class MermaidConverter {
         const result = await converter.convertString(markdown);
 
         return {
-            pdfBase64: result.pdfBuffer.toString('base64'),
+            pdfBase64: result.outputBuffer.toString('base64'),
             metadata: {
                 fileSize: result.fileSize,
                 diagramCount: result.diagramCount,
@@ -119,7 +119,7 @@ export class MermaidConverter {
         });
 
         const result = await converter.convertString(markdown);
-        await fs.writeFile(outputPath, result.pdfBuffer);
+        await fs.writeFile(outputPath, result.outputBuffer);
 
         return {
             outputPath,

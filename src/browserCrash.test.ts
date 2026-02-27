@@ -142,8 +142,8 @@ describe('Browser crash recovery: converter error propagation', () => {
         ].join('\n');
 
         const result = await converter.convertString(md);
-        assert.ok(result.pdfBuffer.length > 0, 'should produce a PDF');
-        assert.equal(result.pdfBuffer.slice(0, 5).toString(), '%PDF-');
+        assert.ok(result.outputBuffer.length > 0, 'should produce a PDF');
+        assert.equal(result.outputBuffer.slice(0, 5).toString(), '%PDF-');
         // The failed diagram should NOT count.
         assert.equal(result.diagramCount, 0, 'failed diagram should not be counted');
     });
@@ -169,7 +169,7 @@ describe('Browser crash recovery: converter error propagation', () => {
         ].join('\n');
 
         const result = await converter.convertString(md);
-        assert.ok(result.pdfBuffer.length > 0, 'should produce a PDF');
+        assert.ok(result.outputBuffer.length > 0, 'should produce a PDF');
         assert.equal(result.diagramCount, 2, 'only valid diagrams should be counted');
     });
 
