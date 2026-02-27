@@ -96,4 +96,21 @@ describe('Converter', () => {
         // Failed diagram is NOT counted in diagramCount
         assert.equal(result.diagramCount, 0);
     });
+
+    test('accepts docx as a valid format', () => {
+        const converter = new Converter({ format: 'docx' });
+        assert.ok(converter);
+    });
+
+    test('converts markdown string to DOCX buffer', async () => {
+        const converter = new Converter({ format: 'docx' });
+        const md = '# Hello\n\nThis is a DOCX test.\n';
+        const result = await converter.convertString(md);
+
+        assert.ok(result.pdfBuffer.length > 0, 'DOCX buffer should have content');
+        assert.ok(result.fileSize > 0, 'fileSize should be > 0');
+        assert.equal(result.diagramCount, 0);
+        assert.equal(result.pdfBuffer.slice(0, 2).toString(), 'PK',
+            'DOCX output should be a valid ZIP (PK header)');
+    });
 });

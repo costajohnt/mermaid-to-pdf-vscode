@@ -2,7 +2,7 @@
 
 export type PageSize = 'A4' | 'Letter' | 'Legal';
 
-export type OutputFormat = 'pdf' | 'html';
+export type OutputFormat = 'pdf' | 'html' | 'docx';
 
 export interface ConversionOptions {
     theme: 'light' | 'dark';
@@ -26,6 +26,10 @@ export interface ConversionOptions {
     font?: string;
     /** Custom font-family for code/pre elements */
     codeFont?: string;
+    /** Enable KaTeX math equation rendering ($...$ for inline, $$...$$ for block) */
+    math?: boolean;
+    /** BCP 47 language code for the HTML document (e.g. "en", "fr", "de"). Defaults to "en". */
+    lang?: string;
 }
 
 /**
@@ -62,7 +66,7 @@ export const VALID_THEMES = ['light', 'dark'] as const;
 export const VALID_PAGE_SIZES = ['A4', 'Letter', 'Legal'] as const;
 
 /** Valid output format values for runtime validation */
-export const VALID_FORMATS = ['pdf', 'html'] as const;
+export const VALID_FORMATS = ['pdf', 'html', 'docx'] as const;
 
 export const DEFAULT_OPTIONS: ConversionOptions = Object.freeze({
     theme: 'light' as const,
