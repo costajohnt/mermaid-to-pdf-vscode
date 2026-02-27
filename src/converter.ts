@@ -1,6 +1,10 @@
 // src/converter.ts
-import { promises as fs } from 'fs';
-import { marked } from 'marked';
+import { promises as fs, readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { createRequire } from 'module';
+import { Marked } from 'marked';
+import HTMLtoDOCX from 'html-to-docx';
+import markedKatex from 'marked-katex-extension';
 import { createRenderSession, type MermaidRenderSession } from './mermaidRenderer.js';
 import { DiagramCache } from './diagramCache.js';
 import { getBrowser } from './browserManager.js';
@@ -22,6 +26,68 @@ const DPI = 96;
 /** Maximum number of concurrent render sessions (Puppeteer pages) for diagrams */
 const MAX_RENDER_CONCURRENCY = 4;
 
+// ---------------------------------------------------------------------------
+// KaTeX CSS with inlined fonts (lazy-loaded, cached)
+// ---------------------------------------------------------------------------
+
+let _katexCssCache: string | null = null;
+
+/**
+ * Load KaTeX CSS and inline all font references as base64 data URIs.
+ * Uses only woff2 format for minimal size. The result is cached.
+ */
+function getKatexCss(): string {
+    if (_katexCssCache !== null) { return _katexCssCache; }
+
+    let katexCssPath: string;
+    try {
+        const req = createRequire(import.meta.url);
+        katexCssPath = req.resolve('katex/dist/katex.min.css');
+    } catch (err) {
+        throw new Error(
+            `Failed to locate KaTeX CSS. The "katex" package may not be installed correctly. ` +
+            `Run "npm install katex" and try again. Original error: ${err instanceof Error ? err.message : String(err)}`
+        );
+    }
+
+    const katexFontsDir = join(dirname(katexCssPath), 'fonts');
+    let css: string;
+    try {
+        css = readFileSync(katexCssPath, 'utf-8');
+    } catch (err) {
+        throw new Error(
+            `Failed to read KaTeX CSS at "${katexCssPath}": ${err instanceof Error ? err.message : String(err)}`
+        );
+    }
+
+    // Replace relative font URLs with base64 data URIs.
+    // Only inline woff2 (modern, small) and drop woff/ttf fallbacks.
+    let fontFailures = 0;
+    css = css.replace(
+        /url\(fonts\/(KaTeX_[^)]+\.woff2)\)\s*format\("woff2"\)(?:,url\(fonts\/[^)]+\)\s*format\("[^"]+"\))*/g,
+        (_match: string, woff2File: string) => {
+            const fontPath = join(katexFontsDir, woff2File);
+            try {
+                const fontData = readFileSync(fontPath);
+                const base64 = fontData.toString('base64');
+                return `url(data:font/woff2;base64,${base64}) format("woff2")`;
+            } catch (err) {
+                fontFailures++;
+                console.error(`Warning: Failed to inline KaTeX font "${woff2File}": ${err instanceof Error ? err.message : String(err)}`);
+                return _match;
+            }
+        },
+    );
+
+    if (fontFailures > 0) {
+        console.error(`Warning: ${fontFailures} KaTeX font(s) could not be inlined. Math rendering may be degraded.`);
+        // Do not cache broken CSS so subsequent conversions can retry
+        return css;
+    }
+    _katexCssCache = css;
+    return css;
+}
+
 /**
  * @deprecated No longer needed -- browser is managed by browserManager.
  * Kept for backward compatibility; callers that still call closePdfBrowser()
@@ -32,8 +98,8 @@ export async function closePdfBrowser(): Promise<void> {
     // closeBrowser() from mermaidRenderer.ts / browserManager.ts.
 }
 
-/** Mermaid fenced code block pattern */
-const MERMAID_REGEX = /```mermaid\r?\n([\s\S]*?)```/g;
+/** Mermaid fenced code block pattern — optionally captures alt="..." text after the language tag */
+const MERMAID_REGEX = /```mermaid(?:\s+alt="([^"]*)")?\r?\n([\s\S]*?)```/g;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -151,11 +217,11 @@ function escapeHtml(str: string): string {
  * box and cannot be page-broken away from it.
  *
  * The heading text and level are stored as `data-heading` and
- * `data-heading-level` attributes on the diagram div.
+ * `data-heading-level` attributes on the diagram container (div or figure).
  */
 function attachHeadingsToDiagrams(html: string): string {
     return html.replace(
-        /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>\s*(<div class="mermaid-diagram[^"]*")/g,
+        /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>\s*(<(?:div|figure)[^>]*class="mermaid-diagram[^"]*")/g,
         (_match, level, text, divStart) => {
             // Strip any inner HTML tags to get plain text for the data attribute
             const plain = text.replace(/<[^>]+>/g, '').trim();
@@ -174,10 +240,12 @@ interface HtmlDocumentOptions {
     customCss?: string;
     font?: string;
     codeFont?: string;
+    katexCss?: string;
+    lang?: string;
 }
 
 function buildHtmlDocument(bodyHtml: string, opts: HtmlDocumentOptions): string {
-    const { theme, customCss, font, codeFont } = opts;
+    const { theme, customCss, font, codeFont, katexCss, lang = 'en' } = opts;
     const isDark = theme === 'dark';
     const bg        = isDark ? '#0d1117' : '#ffffff';
     const fg        = isDark ? '#e6edf3' : '#24292e';
@@ -188,10 +256,10 @@ function buildHtmlDocument(bodyHtml: string, opts: HtmlDocumentOptions): string 
     const linkColor = isDark ? '#58a6ff' : '#0969da';
 
     return `<!DOCTYPE html>
-<html>
+<html lang="${lang}">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src data:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src data:; font-src data:">
     <style>
         * {
             margin: 0;
@@ -402,13 +470,29 @@ function buildHtmlDocument(bodyHtml: string, opts: HtmlDocumentOptions): string 
             border-color: #ffeaa7;
         }
 
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
         @media print {
             body {
                 padding: 0;
                 max-width: none;
             }
         }
-    </style>${buildFontStyle(font, codeFont)}${customCss ? `\n    <style>\n        /* User custom CSS */\n${customCss.split('\n').map(l => '        ' + l).join('\n')}\n    </style>` : ''}
+    </style>${katexCss ? `
+    <style>
+        /* KaTeX math styles */
+${katexCss}
+    </style>` : ''}${buildFontStyle(font, codeFont)}${customCss ? `\n    <style>\n        /* User custom CSS */\n${customCss.split('\n').map(l => '        ' + l).join('\n')}\n    </style>` : ''}
 </head>
 <body>
 ${bodyHtml}
@@ -428,8 +512,8 @@ export interface ConvertFileResult {
 }
 
 export interface ConvertStringResult extends ConvertFileResult {
-    /** The generated PDF content (present when format is 'pdf') */
-    pdfBuffer: Buffer;
+    /** The generated output content as a Buffer (PDF, HTML, or DOCX depending on format) */
+    outputBuffer: Buffer;
     /** The generated HTML content (present when format is 'html') */
     htmlString?: string;
 }
@@ -463,6 +547,14 @@ export class Converter {
             );
         }
 
+        // Validate lang (BCP 47) if provided — prevents HTML injection via library API
+        if (options.lang !== undefined &&
+            !/^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{1,8})*$/.test(options.lang)) {
+            throw new Error(
+                `Invalid lang "${options.lang}". Must be a valid BCP 47 code (e.g. "en", "fr-FR").`
+            );
+        }
+
         this.options = {
             ...DEFAULT_OPTIONS,
             ...options,
@@ -486,7 +578,7 @@ export class Converter {
     // ------------------------------------------------------------------
 
     /**
-     * Convert a markdown file to PDF or HTML on disk.
+     * Convert a markdown file to PDF, HTML, or DOCX on disk.
      */
     async convertFile(inputPath: string, outputPath: string): Promise<ConvertFileResult> {
         const markdown = await fs.readFile(inputPath, 'utf-8');
@@ -496,12 +588,12 @@ export class Converter {
             await fs.writeFile(outputPath, buf);
             return { diagramCount: result.diagramCount, fileSize: buf.length };
         }
-        await fs.writeFile(outputPath, result.pdfBuffer);
-        return { diagramCount: result.diagramCount, fileSize: result.pdfBuffer.length };
+        await fs.writeFile(outputPath, result.outputBuffer);
+        return { diagramCount: result.diagramCount, fileSize: result.outputBuffer.length };
     }
 
     /**
-     * Convert a markdown string to a PDF Buffer (or HTML string) with metadata.
+     * Convert a markdown string to a PDF, HTML, or DOCX Buffer with metadata.
      */
     async convertString(markdown: string): Promise<ConvertStringResult> {
         return this._convert(markdown);
@@ -532,7 +624,7 @@ export class Converter {
         // (a) Collect unique diagram codes that are not already cached
         const uncachedCodes = new Set<string>();
         for (const match of matches) {
-            const code = match[1].trim();
+            const code = match[2].trim();
             if (!this.cache.get(code, mermaidTheme)) {
                 uncachedCodes.add(code);
             }
@@ -606,7 +698,8 @@ export class Converter {
         for (let i = matches.length - 1; i >= 0; i--) {
             const match = matches[i];
             const fullMatch = match[0];
-            const mermaidCode = match[1].trim();
+            const altText = match[1] || undefined;
+            const mermaidCode = match[2].trim();
             const start = match.index!;
             const end = start + fullMatch.length;
 
@@ -639,7 +732,13 @@ export class Converter {
                     displayHeight,
                 );
 
-                const replacement = `<div class="mermaid-diagram${breakClass}"${containerStyle}>${sized}</div>`;
+                let replacement: string;
+                if (altText) {
+                    const escapedAlt = escapeHtml(altText);
+                    replacement = `<figure role="img" aria-label="${escapedAlt}" class="mermaid-diagram${breakClass}"${containerStyle}>${sized}<figcaption class="sr-only">${escapedAlt}</figcaption></figure>`;
+                } else {
+                    replacement = `<div class="mermaid-diagram${breakClass}"${containerStyle}>${sized}</div>`;
+                }
                 processed = processed.slice(0, start) + replacement + processed.slice(end);
                 diagramCount++;
             } else {
@@ -659,7 +758,21 @@ export class Converter {
         }
 
         // 3. Convert processed markdown to HTML via marked (GFM)
-        const bodyHtml = await marked(processed, { gfm: true });
+        //    Use a per-conversion Marked instance to avoid global state pollution.
+        //    If math is enabled, register KaTeX on this instance only.
+        const md = new Marked({ gfm: true });
+        if (this.options.math) {
+            md.use(markedKatex({ throwOnError: false }));
+        }
+        const bodyHtml = await md.parse(processed);
+
+        // Warn if KaTeX produced parse errors (red error text in output)
+        if (this.options.math) {
+            const errorCount = (bodyHtml.match(/class="katex-error"/g) || []).length;
+            if (errorCount > 0) {
+                console.error(`Warning: ${errorCount} math expression(s) failed to parse and will appear as error text in the output.`);
+            }
+        }
 
         // 4. Resolve custom CSS (file path or inline string)
         let resolvedCss: string | undefined;
@@ -671,31 +784,56 @@ export class Converter {
             }
         }
 
-        // 5. Move headings inside their adjacent diagram containers so
-        //    Chromium's PDF renderer can't orphan them on a prior page.
+        // 5. Move headings inside their adjacent diagram containers (div or figure)
+        //    so Chromium's PDF renderer can't orphan them on a prior page.
         const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
         const fullHtml = buildHtmlDocument(adjustedHtml, {
             theme: this.options.theme,
             customCss: resolvedCss,
             font: this.options.font,
             codeFont: this.options.codeFont,
+            katexCss: this.options.math ? getKatexCss() : undefined,
+            lang: this.options.lang,
         });
 
         // 6. If format is 'html', return the self-contained HTML directly
         if (this.options.format === 'html') {
             const htmlBuffer = Buffer.from(fullHtml, 'utf-8');
             return {
-                pdfBuffer: htmlBuffer,
+                outputBuffer: htmlBuffer,
                 htmlString: fullHtml,
                 diagramCount,
                 fileSize: htmlBuffer.length,
             };
         }
 
-        // 7. Generate PDF with the shared Puppeteer browser instance
-        const pdfBuffer = await this._generatePdf(fullHtml);
+        // 6b. If format is 'docx', convert HTML to DOCX
+        if (this.options.format === 'docx') {
+            let docxArrayBuffer: ArrayBuffer;
+            try {
+                docxArrayBuffer = await HTMLtoDOCX(fullHtml, null, {
+                    table: { row: { cantSplit: true } },
+                    footer: true,
+                    pageNumber: true,
+                });
+            } catch (err) {
+                throw new Error(
+                    `DOCX conversion failed: ${err instanceof Error ? err.message : String(err)}. ` +
+                    `Try using --format pdf or --format html instead.`
+                );
+            }
+            const docxBuffer = Buffer.from(docxArrayBuffer);
+            return {
+                outputBuffer: docxBuffer,
+                diagramCount,
+                fileSize: docxBuffer.length,
+            };
+        }
 
-        return { pdfBuffer, diagramCount, fileSize: pdfBuffer.length };
+        // 7. Generate PDF with the shared Puppeteer browser instance
+        const outputBuffer = await this._generatePdf(fullHtml);
+
+        return { outputBuffer, diagramCount, fileSize: outputBuffer.length };
     }
 
     // ------------------------------------------------------------------
@@ -729,6 +867,7 @@ export class Converter {
             const pdfOpts: Parameters<typeof page.pdf>[0] = {
                 format: this.options.pageSize,
                 printBackground: true,
+                tagged: true,
                 margin: {
                     top:    this.options.margins.top,
                     right:  this.options.margins.right,

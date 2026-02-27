@@ -7,7 +7,7 @@ import { VALID_THEMES, VALID_PAGE_SIZES } from './types.js';
 
 /**
  * Shape of the .mermaidrc.json config file.
- * Mirrors the CLI options that can be set.
+ * Currently supports a subset of CLI options: theme, pageSize, and margins.
  */
 export interface MermaidrcConfig {
     theme?: 'light' | 'dark';
@@ -22,14 +22,27 @@ export interface MermaidrcConfig {
 
 /**
  * Attempt to read and parse a JSON file at the given path.
- * Returns null if the file does not exist or cannot be parsed.
+ * Returns null if the file does not exist.
+ * Throws if the file exists but cannot be read or contains invalid JSON.
  */
 function tryReadJsonFile(filePath: string): unknown | null {
+    let content: string;
     try {
-        const content = readFileSync(filePath, 'utf-8');
+        content = readFileSync(filePath, 'utf-8');
+    } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+            return null; // File doesn't exist — expected
+        }
+        throw new Error(
+            `Config file "${filePath}" exists but cannot be read: ${err instanceof Error ? err.message : String(err)}`
+        );
+    }
+    try {
         return JSON.parse(content);
-    } catch {
-        return null;
+    } catch (err) {
+        throw new Error(
+            `Config file "${filePath}" contains invalid JSON: ${err instanceof Error ? err.message : String(err)}`
+        );
     }
 }
 
@@ -140,10 +153,20 @@ export function mergeConfig(
     // Apply CLI flags (highest priority — override config file)
     if (cliFlags.theme !== undefined) { merged.theme = cliFlags.theme; }
     if (cliFlags.pageSize !== undefined) { merged.pageSize = cliFlags.pageSize; }
+    if (cliFlags.format !== undefined) { merged.format = cliFlags.format; }
     if (cliFlags.margins !== undefined) {
         // CLI margins merge on top of config file margins
         merged.margins = { ...(merged.margins ?? {}), ...cliFlags.margins } as ConversionOptions['margins'];
     }
+
+    if (cliFlags.pageNumbers !== undefined) { merged.pageNumbers = cliFlags.pageNumbers; }
+    if (cliFlags.headerTemplate !== undefined) { merged.headerTemplate = cliFlags.headerTemplate; }
+    if (cliFlags.footerTemplate !== undefined) { merged.footerTemplate = cliFlags.footerTemplate; }
+    if (cliFlags.customCss !== undefined) { merged.customCss = cliFlags.customCss; }
+    if (cliFlags.font !== undefined) { merged.font = cliFlags.font; }
+    if (cliFlags.codeFont !== undefined) { merged.codeFont = cliFlags.codeFont; }
+    if (cliFlags.math !== undefined) { merged.math = cliFlags.math; }
+    if (cliFlags.lang !== undefined) { merged.lang = cliFlags.lang; }
 
     return merged;
 }

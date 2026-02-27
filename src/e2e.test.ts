@@ -37,8 +37,8 @@ describe('End-to-end', () => {
         const md = '# Dark Theme\n\n```mermaid\nflowchart LR\n    A --> B\n```\n';
         const result = await converter.convertString(md);
 
-        assert.ok(result.pdfBuffer.length > 0);
-        assert.equal(result.pdfBuffer.slice(0, 5).toString(), '%PDF-');
+        assert.ok(result.outputBuffer.length > 0);
+        assert.equal(result.outputBuffer.slice(0, 5).toString(), '%PDF-');
         assert.equal(result.diagramCount, 1);
     });
 
@@ -47,6 +47,6 @@ describe('End-to-end', () => {
         const md = '# Letter Size\n\nHello world.\n';
         const result = await converter.convertString(md);
 
-        assert.ok(result.pdfBuffer.length > 0);
+        assert.ok(result.outputBuffer.length > 0);
     });
 });

@@ -123,8 +123,8 @@ describe('Boundary: edge-case inputs', () => {
     test('empty markdown input should produce a valid PDF', async () => {
         const converter = new Converter();
         const result = await converter.convertString('');
-        assert.ok(result.pdfBuffer.length > 0, 'should produce a PDF even for empty input');
-        assert.equal(result.pdfBuffer.slice(0, 5).toString(), '%PDF-');
+        assert.ok(result.outputBuffer.length > 0, 'should produce a PDF even for empty input');
+        assert.equal(result.outputBuffer.slice(0, 5).toString(), '%PDF-');
         assert.equal(result.diagramCount, 0);
     });
 
@@ -144,8 +144,8 @@ describe('Boundary: edge-case inputs', () => {
         ].join('\n');
 
         const result = await converter.convertString(md);
-        assert.ok(result.pdfBuffer.length > 0, 'should produce a PDF');
-        assert.equal(result.pdfBuffer.slice(0, 5).toString(), '%PDF-');
+        assert.ok(result.outputBuffer.length > 0, 'should produce a PDF');
+        assert.equal(result.outputBuffer.slice(0, 5).toString(), '%PDF-');
         assert.equal(result.diagramCount, 0, 'should report zero diagrams');
     });
 });

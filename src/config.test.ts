@@ -150,11 +150,16 @@ describe('loadConfigFile', () => {
         );
     });
 
-    test('ignores malformed JSON gracefully', () => {
+    test('throws on malformed JSON with actionable message', () => {
         writeFileSync(join(tmpDir, '.mermaidrc.json'), '{bad json}');
         process.chdir(tmpDir);
-        // Malformed JSON is treated as "no config" (tryReadJsonFile returns null from JSON.parse error)
-        const config = loadConfigFile();
-        assert.deepStrictEqual(config, {});
+        assert.throws(
+            () => loadConfigFile(),
+            (err: unknown) => {
+                assert.ok(err instanceof Error);
+                assert.match(err.message, /invalid JSON/);
+                return true;
+            },
+        );
     });
 });

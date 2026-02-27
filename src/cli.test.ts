@@ -249,3 +249,47 @@ Some text after the diagram.
         }
     });
 });
+
+describe('CLI --watch flag', () => {
+    test('--watch flag is parsed (long form)', async () => {
+        // --watch without an input file should error with a specific message
+        const { stderr, code } = await runCliWithStdin(
+            ['--watch'],
+            '# test\n',
+        );
+
+        assert.notEqual(code, 0, 'CLI should exit with non-zero code');
+        assert.ok(
+            stderr.includes('--watch requires an input file'),
+            `stderr should mention --watch requires an input file, got: ${stderr}`,
+        );
+    });
+
+    test('-w flag is parsed (short form)', async () => {
+        // -w without an input file should error with a specific message
+        const { stderr, code } = await runCliWithStdin(
+            ['-w'],
+            '# test\n',
+        );
+
+        assert.notEqual(code, 0, 'CLI should exit with non-zero code');
+        assert.ok(
+            stderr.includes('--watch requires an input file'),
+            `stderr should mention --watch requires an input file, got: ${stderr}`,
+        );
+    });
+
+    test('--watch requires an input file (not stdin)', async () => {
+        // Pipe content via stdin with --watch but no input file
+        const { stderr, code } = await runCliWithStdin(
+            ['--watch', '-o', '/tmp/watch-test-output.pdf'],
+            '# test\n',
+        );
+
+        assert.notEqual(code, 0, 'CLI should exit with non-zero code');
+        assert.ok(
+            stderr.includes('cannot watch stdin'),
+            `stderr should mention cannot watch stdin, got: ${stderr}`,
+        );
+    });
+});
