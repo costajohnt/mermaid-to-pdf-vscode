@@ -30,6 +30,14 @@ export interface ConversionOptions {
     math?: boolean;
     /** BCP 47 language code for the HTML document (e.g. "en", "fr", "de"). Defaults to "en". */
     lang?: string;
+    /** Custom Mermaid configuration object (merged with required settings; securityLevel and useMaxWidth are enforced) */
+    mermaidConfig?: Record<string, unknown>;
+    /** PDF metadata: document title. If not set, auto-detected from first # heading. */
+    pdfTitle?: string;
+    /** PDF metadata: document author. Embedded as <meta name="author">. */
+    pdfAuthor?: string;
+    /** PDF metadata: document subject/description. Embedded as <meta name="description">. */
+    pdfSubject?: string;
 }
 
 /**

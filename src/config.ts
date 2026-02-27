@@ -6,6 +6,36 @@ import type { ConversionOptions } from './types.js';
 import { VALID_THEMES, VALID_PAGE_SIZES } from './types.js';
 
 /**
+ * Read and parse a JSON file at the given path, validating it is a plain object.
+ * Used to load --mermaid-config files.
+ */
+export function loadMermaidConfigFile(filePath: string): Record<string, unknown> {
+    const resolved = resolve(filePath);
+    let content: string;
+    try {
+        content = readFileSync(resolved, 'utf-8');
+    } catch (err) {
+        throw new Error(
+            `Failed to read mermaid config file "${resolved}": ${err instanceof Error ? err.message : String(err)}`
+        );
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(content);
+    } catch (err) {
+        throw new Error(
+            `Mermaid config file "${resolved}" contains invalid JSON: ${err instanceof Error ? err.message : String(err)}`
+        );
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error(
+            `Mermaid config file "${resolved}" must contain a JSON object at the top level.`
+        );
+    }
+    return parsed as Record<string, unknown>;
+}
+
+/**
  * Shape of the .mermaidrc.json config file.
  * Currently supports a subset of CLI options: theme, pageSize, and margins.
  */
@@ -18,6 +48,8 @@ export interface MermaidrcConfig {
         bottom?: string;
         left?: string;
     };
+    /** Path to a JSON file with custom Mermaid configuration */
+    mermaidConfig?: string;
 }
 
 /**
@@ -103,6 +135,15 @@ function validateConfig(raw: unknown, filePath: string): MermaidrcConfig {
         config.margins = marginConfig;
     }
 
+    if (obj.mermaidConfig !== undefined) {
+        if (typeof obj.mermaidConfig !== 'string') {
+            throw new Error(
+                `Invalid config file "${filePath}": mermaidConfig must be a string path to a JSON file. Got ${typeof obj.mermaidConfig}.`
+            );
+        }
+        config.mermaidConfig = obj.mermaidConfig;
+    }
+
     return config;
 }
 
@@ -167,6 +208,17 @@ export function mergeConfig(
     if (cliFlags.codeFont !== undefined) { merged.codeFont = cliFlags.codeFont; }
     if (cliFlags.math !== undefined) { merged.math = cliFlags.math; }
     if (cliFlags.lang !== undefined) { merged.lang = cliFlags.lang; }
+
+    if (cliFlags.pdfTitle !== undefined) { merged.pdfTitle = cliFlags.pdfTitle; }
+    if (cliFlags.pdfAuthor !== undefined) { merged.pdfAuthor = cliFlags.pdfAuthor; }
+    if (cliFlags.pdfSubject !== undefined) { merged.pdfSubject = cliFlags.pdfSubject; }
+
+    // mermaidConfig: CLI flag (already-loaded object) overrides config file path
+    if (cliFlags.mermaidConfig !== undefined) {
+        merged.mermaidConfig = cliFlags.mermaidConfig;
+    } else if (fileConfig.mermaidConfig !== undefined) {
+        merged.mermaidConfig = loadMermaidConfigFile(fileConfig.mermaidConfig);
+    }
 
     return merged;
 }

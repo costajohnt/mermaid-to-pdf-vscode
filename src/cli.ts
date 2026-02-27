@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-import { resolve, join, basename } from 'path';
+import { resolve, join, basename, dirname } from 'path';
 import { promises as fs } from 'fs';
 import { watch as fsWatch } from 'fs';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
 import { Converter, closePdfBrowser } from './converter.js';
 import { closeBrowser } from './mermaidRenderer.js';
-import { loadConfigFile, mergeConfig } from './config.js';
+import { loadConfigFile, mergeConfig, loadMermaidConfigFile } from './config.js';
 import type { CliJsonOutput, ConversionOptions } from './types.js';
 
 export async function main(argv: string[] = process.argv.slice(2)) {
@@ -35,7 +35,12 @@ Options:
   --font <family>         Set body text font-family (falls back gracefully)
   --code-font <family>    Set code/pre font-family (falls back gracefully)
   --lang <code>           Set document language (BCP 47 code, default: en)
+  --mermaid-config <file>  Path to a JSON file with custom Mermaid configuration
+  --pdf-title <title>     Set PDF document title (auto-detected from heading if omitted)
+  --pdf-author <name>     Set PDF document author metadata
+  --pdf-subject <text>    Set PDF document subject/description metadata
   --math                  Enable KaTeX math equation rendering
+  -q, --quiet             Suppress progress output on stderr
   --json                  Output results as JSON to stdout
   -h, --help              Show this help message
 
@@ -80,8 +85,13 @@ Examples:
     let codeFont: string | undefined;
     let lang: string | undefined;
     let jsonOutput = false;
+    let quiet = false;
     let math = false;
     let watch = false;
+    let mermaidConfigPath: string | undefined;
+    let pdfTitle: string | undefined;
+    let pdfAuthor: string | undefined;
+    let pdfSubject: string | undefined;
 
     for (let i = 0; i < argv.length; i++) {
         switch (argv[i]) {
@@ -198,8 +208,44 @@ Examples:
                 lang = langVal;
                 break;
             }
+            case '--mermaid-config': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --mermaid-config requires a path to a JSON file.');
+                    process.exit(1);
+                }
+                mermaidConfigPath = argv[++i];
+                break;
+            }
+            case '--pdf-title': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --pdf-title requires a title string.');
+                    process.exit(1);
+                }
+                pdfTitle = argv[++i];
+                break;
+            }
+            case '--pdf-author': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --pdf-author requires an author name.');
+                    process.exit(1);
+                }
+                pdfAuthor = argv[++i];
+                break;
+            }
+            case '--pdf-subject': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --pdf-subject requires a subject string.');
+                    process.exit(1);
+                }
+                pdfSubject = argv[++i];
+                break;
+            }
             case '--math':
                 math = true;
+                break;
+            case '-q':
+            case '--quiet':
+                quiet = true;
                 break;
             case '--json':
                 jsonOutput = true;
@@ -233,6 +279,10 @@ Examples:
         if (codeFont) { cliFlags.codeFont = codeFont; }
         if (lang) { cliFlags.lang = lang; }
         if (math) { cliFlags.math = math; }
+        if (mermaidConfigPath) { cliFlags.mermaidConfig = loadMermaidConfigFile(mermaidConfigPath); }
+        if (pdfTitle) { cliFlags.pdfTitle = pdfTitle; }
+        if (pdfAuthor) { cliFlags.pdfAuthor = pdfAuthor; }
+        if (pdfSubject) { cliFlags.pdfSubject = pdfSubject; }
         const mergedOptions = mergeConfig(fileConfig, cliFlags);
 
         const fmt = mergedOptions.format ?? 'pdf';
@@ -264,10 +314,10 @@ Examples:
             console.error('Error: No input files matched. Use --help for usage.');
             process.exit(1);
         } else if (isBatchMode) {
-            await runBatch(inputFiles, mergedOptions, ext, outdir, jsonOutput);
+            await runBatch(inputFiles, mergedOptions, ext, outdir, jsonOutput, quiet);
         } else {
             // Single file mode — backward compatible
-            await runSingle(inputFiles[0], mergedOptions, ext, outputFile, jsonOutput, watch);
+            await runSingle(inputFiles[0], mergedOptions, ext, outputFile, jsonOutput, quiet, watch);
         }
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -341,6 +391,7 @@ async function runSingle(
     ext: string,
     outputFile: string | null,
     jsonOutput: boolean,
+    quiet: boolean,
     watch: boolean,
 ): Promise<void> {
     const startTime = Date.now();
@@ -355,24 +406,27 @@ async function runSingle(
     const resolvedOutput = resolve(outputFile);
     const converter = new Converter(mergedOptions);
 
-    if (!jsonOutput) {
+    const shouldLog = !jsonOutput && !quiet;
+
+    if (shouldLog) {
         console.error(`Converting to ${resolvedOutput}...`);
     }
 
     const markdown = await fs.readFile(resolvedInput, 'utf-8');
-    const result = await converter.convertString(markdown);
+    const result = await converter.convertString(markdown, dirname(resolvedInput));
     await fs.writeFile(resolvedOutput, result.outputBuffer);
+    const elapsed = Date.now() - startTime;
 
     if (jsonOutput) {
         const output: CliJsonOutput = {
             outputPath: resolvedOutput,
             fileSize: result.fileSize,
             diagramCount: result.diagramCount,
-            processingTimeMs: Date.now() - startTime,
+            processingTimeMs: elapsed,
         };
         console.log(JSON.stringify(output));
-    } else {
-        console.error(`Done. ${(result.fileSize / 1024).toFixed(1)} KB written.`);
+    } else if (!quiet) {
+        console.error(`Converted to ${resolvedOutput} (${elapsed}ms)`);
     }
 
     // Watch mode: keep browser alive and re-convert on file changes
@@ -388,7 +442,7 @@ async function runSingle(
                 const rebuildStart = Date.now();
                 try {
                     const md = await fs.readFile(resolvedInput, 'utf-8');
-                    const rebuildResult = await converter.convertString(md);
+                    const rebuildResult = await converter.convertString(md, dirname(resolvedInput));
                     await fs.writeFile(resolvedOutput, rebuildResult.outputBuffer);
                     consecutiveFailures = 0;
                     const time = new Date().toLocaleTimeString();
@@ -480,6 +534,7 @@ async function runBatch(
     ext: string,
     outdir: string | null,
     jsonOutput: boolean,
+    quiet: boolean,
 ): Promise<void> {
     if (outdir) {
         try {
@@ -508,6 +563,8 @@ async function runBatch(
     }
 
     const converter = new Converter(mergedOptions);
+    const batchStart = Date.now();
+    const shouldLog = !jsonOutput && !quiet;
     let succeeded = 0;
     let failed = 0;
 
@@ -527,19 +584,20 @@ async function runBatch(
             ? resolve(join(outdir, /\.md$/i.test(basename(file)) ? basename(file).replace(/\.md$/i, ext) : basename(file) + ext))
             : /\.md$/i.test(file) ? file.replace(/\.md$/i, ext) : file + ext;
 
-        if (!jsonOutput) {
-            console.error(`[${i + 1}/${inputFiles.length}] ${file}`);
+        if (shouldLog) {
+            console.error(`[${i + 1}/${inputFiles.length}] Converting ${basename(file)}...`);
         }
 
         const fileStart = Date.now();
 
         try {
             const markdown = await fs.readFile(file, 'utf-8');
-            const result = await converter.convertString(markdown);
+            const result = await converter.convertString(markdown, dirname(resolve(file)));
             await fs.writeFile(outputPath, result.outputBuffer);
 
-            if (!jsonOutput) {
-                console.error(`  → ${outputPath} (${(result.fileSize / 1024).toFixed(1)} KB)`);
+            if (shouldLog) {
+                const fileElapsed = Date.now() - fileStart;
+                console.error(`[${i + 1}/${inputFiles.length}] Done: ${basename(file)} (${fileElapsed}ms)`);
             }
 
             if (jsonOutput) {
@@ -574,7 +632,7 @@ async function runBatch(
             }
 
             if (!jsonOutput) {
-                console.error(`  ✗ Error: ${errMsg}`);
+                console.error(`[${i + 1}/${inputFiles.length}] FAILED: ${basename(file)} - ${errMsg}`);
             }
 
             if (jsonOutput) {
@@ -590,8 +648,9 @@ async function runBatch(
 
     if (jsonOutput) {
         console.log(JSON.stringify(jsonResults));
-    } else {
-        console.error(`\nBatch complete: ${succeeded} succeeded, ${failed} failed out of ${inputFiles.length} files.`);
+    } else if (!quiet || failed > 0) {
+        const totalElapsed = Date.now() - batchStart;
+        console.error(`Batch complete: ${succeeded} succeeded, ${failed} failed (${totalElapsed}ms)`);
     }
 
     if (failed > 0) { process.exit(1); }
