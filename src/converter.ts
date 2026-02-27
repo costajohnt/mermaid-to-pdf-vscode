@@ -2,7 +2,7 @@
 import { promises as fs, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { createRequire } from 'module';
-import { marked } from 'marked';
+import { Marked } from 'marked';
 import HTMLtoDOCX from 'html-to-docx';
 import markedKatex from 'marked-katex-extension';
 import { createRenderSession, type MermaidRenderSession } from './mermaidRenderer.js';
@@ -31,7 +31,6 @@ const MAX_RENDER_CONCURRENCY = 4;
 // ---------------------------------------------------------------------------
 
 let _katexCssCache: string | null = null;
-let _katexExtensionRegistered = false;
 
 /**
  * Load KaTeX CSS and inline all font references as base64 data URIs.
@@ -63,6 +62,7 @@ function getKatexCss(): string {
 
     // Replace relative font URLs with base64 data URIs.
     // Only inline woff2 (modern, small) and drop woff/ttf fallbacks.
+    let fontFailures = 0;
     css = css.replace(
         /url\(fonts\/(KaTeX_[^)]+\.woff2)\)\s*format\("woff2"\)(?:,url\(fonts\/[^)]+\)\s*format\("[^"]+"\))*/g,
         (_match: string, woff2File: string) => {
@@ -72,12 +72,18 @@ function getKatexCss(): string {
                 const base64 = fontData.toString('base64');
                 return `url(data:font/woff2;base64,${base64}) format("woff2")`;
             } catch (err) {
-                console.error(`Warning: Failed to inline KaTeX font "${woff2File}": ${err instanceof Error ? err.message : String(err)}. Math equations may render without proper fonts.`);
+                fontFailures++;
+                console.error(`Warning: Failed to inline KaTeX font "${woff2File}": ${err instanceof Error ? err.message : String(err)}`);
                 return _match;
             }
         },
     );
 
+    if (fontFailures > 0) {
+        console.error(`Warning: ${fontFailures} KaTeX font(s) could not be inlined. Math rendering may be degraded.`);
+        // Do not cache broken CSS so subsequent conversions can retry
+        return css;
+    }
     _katexCssCache = css;
     return css;
 }
@@ -541,6 +547,14 @@ export class Converter {
             );
         }
 
+        // Validate lang (BCP 47) if provided — prevents HTML injection via library API
+        if (options.lang !== undefined &&
+            !/^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{1,8})*$/.test(options.lang)) {
+            throw new Error(
+                `Invalid lang "${options.lang}". Must be a valid BCP 47 code (e.g. "en", "fr-FR").`
+            );
+        }
+
         this.options = {
             ...DEFAULT_OPTIONS,
             ...options,
@@ -744,12 +758,21 @@ export class Converter {
         }
 
         // 3. Convert processed markdown to HTML via marked (GFM)
-        //    Register the KaTeX extension once (marked.use() is cumulative).
-        if (this.options.math && !_katexExtensionRegistered) {
-            marked.use(markedKatex({ throwOnError: false }));
-            _katexExtensionRegistered = true;
+        //    Use a per-conversion Marked instance to avoid global state pollution.
+        //    If math is enabled, register KaTeX on this instance only.
+        const md = new Marked({ gfm: true });
+        if (this.options.math) {
+            md.use(markedKatex({ throwOnError: false }));
         }
-        const bodyHtml = await marked(processed, { gfm: true });
+        const bodyHtml = await md.parse(processed);
+
+        // Warn if KaTeX produced parse errors (red error text in output)
+        if (this.options.math) {
+            const errorCount = (bodyHtml.match(/class="katex-error"/g) || []).length;
+            if (errorCount > 0) {
+                console.error(`Warning: ${errorCount} math expression(s) failed to parse and will appear as error text in the output.`);
+            }
+        }
 
         // 4. Resolve custom CSS (file path or inline string)
         let resolvedCss: string | undefined;

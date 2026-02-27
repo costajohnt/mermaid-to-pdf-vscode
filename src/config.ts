@@ -22,7 +22,8 @@ export interface MermaidrcConfig {
 
 /**
  * Attempt to read and parse a JSON file at the given path.
- * Returns null if the file does not exist or cannot be parsed.
+ * Returns null if the file does not exist.
+ * Throws if the file exists but cannot be read or contains invalid JSON.
  */
 function tryReadJsonFile(filePath: string): unknown | null {
     let content: string;
@@ -32,8 +33,9 @@ function tryReadJsonFile(filePath: string): unknown | null {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
             return null; // File doesn't exist — expected
         }
-        console.error(`Warning: Could not read config file "${filePath}": ${err instanceof Error ? err.message : String(err)}`);
-        return null;
+        throw new Error(
+            `Config file "${filePath}" exists but cannot be read: ${err instanceof Error ? err.message : String(err)}`
+        );
     }
     try {
         return JSON.parse(content);

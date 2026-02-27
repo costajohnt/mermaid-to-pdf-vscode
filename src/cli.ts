@@ -291,14 +291,21 @@ Examples:
  * deduplicated list of resolved file paths.
  */
 async function expandInputPatterns(patterns: string[]): Promise<string[]> {
-    if (patterns.length === 0) return [];
+    if (patterns.length === 0) { return []; }
 
     const seen = new Set<string>();
     const result: string[] = [];
 
     for (const pattern of patterns) {
         if (/[*?{[]/.test(pattern)) {
-            const matches = await glob(pattern, { nodir: true });
+            let matches: string[];
+            try {
+                matches = await glob(pattern, { nodir: true });
+            } catch (err) {
+                throw new Error(
+                    `Failed to expand glob pattern "${pattern}": ${err instanceof Error ? err.message : String(err)}`
+                );
+            }
             if (matches.length === 0) {
                 console.error(`Warning: Glob pattern "${pattern}" matched zero files.`);
             }
@@ -375,7 +382,7 @@ async function runSingle(
         const MAX_CONSECUTIVE_FAILURES = 5;
 
         const watcher = fsWatch(resolvedInput, () => {
-            if (debounceTimer) clearTimeout(debounceTimer);
+            if (debounceTimer) { clearTimeout(debounceTimer); }
             debounceTimer = setTimeout(async () => {
                 const rebuildStart = Date.now();
                 try {
@@ -391,7 +398,7 @@ async function runSingle(
                     console.error(`[${new Date().toLocaleTimeString()}] Error: ${err instanceof Error ? err.message : String(err)}`);
                     if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
                         console.error(`\nFatal: ${MAX_CONSECUTIVE_FAILURES} consecutive rebuild failures. Exiting watch mode.`);
-                        watcher.close();
+                        try { watcher.close(); } catch { /* already closed */ }
                         try { await closeBrowser(); } catch { /* ignore cleanup errors */ }
                         try { await closePdfBrowser(); } catch { /* ignore cleanup errors */ }
                         process.exit(1);
@@ -403,13 +410,18 @@ async function runSingle(
         watcher.on('error', (err) => {
             console.error(`Error: File watcher failed for "${resolvedInput}": ${err.message}`);
             console.error('Stopping watch mode.');
-            watcher.close();
-            closeBrowser().then(() => closePdfBrowser()).then(() => process.exit(1)).catch(() => process.exit(1));
+            try { watcher.close(); } catch { /* already closed */ }
+            closeBrowser()
+                .then(() => closePdfBrowser())
+                .catch((cleanupErr) => {
+                    console.error(`Warning: Browser cleanup failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`);
+                })
+                .finally(() => process.exit(1));
         });
 
         // Graceful shutdown on Ctrl+C
         process.on('SIGINT', async () => {
-            watcher.close();
+            try { watcher.close(); } catch { /* already closed */ }
             try { await closeBrowser(); } catch { /* ignore cleanup errors */ }
             try { await closePdfBrowser(); } catch { /* ignore cleanup errors */ }
             process.exit(0);
@@ -542,6 +554,23 @@ async function runBatch(
             succeeded++;
         } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
+            const errCode = (err as NodeJS.ErrnoException).code;
+
+            // Detect systemic errors that will doom all remaining files
+            const isFatal = err instanceof Error && (
+                /ENOSPC|ENOMEM/.test(errCode ?? '') ||
+                /Target closed|browser.*disconnected|Protocol error/i.test(err.message)
+            );
+
+            if (isFatal) {
+                console.error(`\nFatal error during batch processing: ${errMsg}`);
+                console.error(`Aborting. ${succeeded} file(s) succeeded before failure.`);
+                if (jsonOutput) {
+                    jsonResults.push({ inputPath: file, error: errMsg });
+                    console.log(JSON.stringify(jsonResults));
+                }
+                process.exit(1);
+            }
 
             if (!jsonOutput) {
                 console.error(`  ✗ Error: ${errMsg}`);
@@ -564,7 +593,7 @@ async function runBatch(
         console.error(`\nBatch complete: ${succeeded} succeeded, ${failed} failed out of ${inputFiles.length} files.`);
     }
 
-    if (failed > 0) process.exit(1);
+    if (failed > 0) { process.exit(1); }
 }
 
 function readStdin(timeoutMs: number = 30_000): Promise<string> {
