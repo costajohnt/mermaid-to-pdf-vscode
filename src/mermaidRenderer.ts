@@ -109,6 +109,22 @@ export async function createRenderSession(
             { timeout: RENDER_TIMEOUT },
         );
 
+        // Warn about malformed diagram-type config values (must validate in Node
+        // since console.error inside page.evaluate goes to the page, not stderr)
+        if (mermaidConfig) {
+            const diagramTypeKeys = [
+                'flowchart', 'sequence', 'gantt', 'journey', 'timeline',
+                'class', 'state', 'er', 'pie', 'quadrantChart',
+                'requirement', 'mindmap', 'gitGraph', 'c4', 'sankey', 'block',
+            ];
+            for (const dt of diagramTypeKeys) {
+                const val = mermaidConfig[dt];
+                if (val !== undefined && (typeof val !== 'object' || val === null || Array.isArray(val))) {
+                    console.error(`Warning: mermaidConfig.${dt} must be an object, got ${typeof val}. This value will be ignored.`);
+                }
+            }
+        }
+
         // Initialize mermaid once with useMaxWidth: false on ALL diagram types.
         // User config is merged first, then enforced settings are applied on top
         // so securityLevel and useMaxWidth cannot be overridden.

@@ -209,6 +209,10 @@ export function mergeConfig(
     if (cliFlags.math !== undefined) { merged.math = cliFlags.math; }
     if (cliFlags.lang !== undefined) { merged.lang = cliFlags.lang; }
 
+    if (cliFlags.pdfTitle !== undefined) { merged.pdfTitle = cliFlags.pdfTitle; }
+    if (cliFlags.pdfAuthor !== undefined) { merged.pdfAuthor = cliFlags.pdfAuthor; }
+    if (cliFlags.pdfSubject !== undefined) { merged.pdfSubject = cliFlags.pdfSubject; }
+
     // mermaidConfig: CLI flag (already-loaded object) overrides config file path
     if (cliFlags.mermaidConfig !== undefined) {
         merged.mermaidConfig = cliFlags.mermaidConfig;

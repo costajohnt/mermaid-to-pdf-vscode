@@ -1,6 +1,6 @@
 // src/converter.ts
 import { promises as fs, readFileSync, existsSync, statSync } from 'fs';
-import { join, dirname, resolve, extname } from 'path';
+import { join, dirname, resolve, extname, sep } from 'path';
 import { createRequire } from 'module';
 import { Marked } from 'marked';
 import HTMLtoDOCX from 'html-to-docx';
@@ -244,6 +244,13 @@ export function embedLocalImages(markdown: string, basePath?: string): string {
             }
 
             const absolutePath = resolve(base, trimmedPath);
+
+            // Prevent path traversal outside the base directory
+            if (!absolutePath.startsWith(base + sep) && absolutePath !== base) {
+                console.error(`Warning: Image path escapes base directory, skipping: ${trimmedPath}`);
+                return match;
+            }
+
             const ext = extname(absolutePath).toLowerCase();
             const mimeType = IMAGE_MIME_TYPES[ext];
 
@@ -263,7 +270,7 @@ export function embedLocalImages(markdown: string, basePath?: string): string {
             try {
                 stat = statSync(absolutePath);
             } catch (err) {
-                console.error(`Warning: Could not stat local image, skipping: ${absolutePath}`);
+                console.error(`Warning: Could not stat local image, skipping: ${absolutePath}: ${err instanceof Error ? err.message : String(err)}`);
                 return match;
             }
 
@@ -278,7 +285,7 @@ export function embedLocalImages(markdown: string, basePath?: string): string {
                 const base64 = data.toString('base64');
                 return `![${alt}](data:${mimeType};base64,${base64})`;
             } catch (err) {
-                console.error(`Warning: Failed to read local image, skipping: ${absolutePath}`);
+                console.error(`Warning: Failed to read local image, skipping: ${absolutePath}: ${err instanceof Error ? err.message : String(err)}`);
                 return match;
             }
         },

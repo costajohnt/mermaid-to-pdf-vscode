@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-import { resolve, join, basename } from 'path';
+import { resolve, join, basename, dirname } from 'path';
 import { promises as fs } from 'fs';
 import { watch as fsWatch } from 'fs';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
 import { Converter, closePdfBrowser } from './converter.js';
 import { closeBrowser } from './mermaidRenderer.js';
-import { loadConfigFile, mergeConfig } from './config.js';
+import { loadConfigFile, mergeConfig, loadMermaidConfigFile } from './config.js';
 import type { CliJsonOutput, ConversionOptions } from './types.js';
 
 export async function main(argv: string[] = process.argv.slice(2)) {
@@ -35,6 +35,10 @@ Options:
   --font <family>         Set body text font-family (falls back gracefully)
   --code-font <family>    Set code/pre font-family (falls back gracefully)
   --lang <code>           Set document language (BCP 47 code, default: en)
+  --mermaid-config <file>  Path to a JSON file with custom Mermaid configuration
+  --pdf-title <title>     Set PDF document title (auto-detected from heading if omitted)
+  --pdf-author <name>     Set PDF document author metadata
+  --pdf-subject <text>    Set PDF document subject/description metadata
   --math                  Enable KaTeX math equation rendering
   -q, --quiet             Suppress progress output on stderr
   --json                  Output results as JSON to stdout
@@ -84,6 +88,10 @@ Examples:
     let quiet = false;
     let math = false;
     let watch = false;
+    let mermaidConfigPath: string | undefined;
+    let pdfTitle: string | undefined;
+    let pdfAuthor: string | undefined;
+    let pdfSubject: string | undefined;
 
     for (let i = 0; i < argv.length; i++) {
         switch (argv[i]) {
@@ -200,6 +208,38 @@ Examples:
                 lang = langVal;
                 break;
             }
+            case '--mermaid-config': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --mermaid-config requires a path to a JSON file.');
+                    process.exit(1);
+                }
+                mermaidConfigPath = argv[++i];
+                break;
+            }
+            case '--pdf-title': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --pdf-title requires a title string.');
+                    process.exit(1);
+                }
+                pdfTitle = argv[++i];
+                break;
+            }
+            case '--pdf-author': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --pdf-author requires an author name.');
+                    process.exit(1);
+                }
+                pdfAuthor = argv[++i];
+                break;
+            }
+            case '--pdf-subject': {
+                if (i + 1 >= argv.length) {
+                    console.error('Error: --pdf-subject requires a subject string.');
+                    process.exit(1);
+                }
+                pdfSubject = argv[++i];
+                break;
+            }
             case '--math':
                 math = true;
                 break;
@@ -239,6 +279,10 @@ Examples:
         if (codeFont) { cliFlags.codeFont = codeFont; }
         if (lang) { cliFlags.lang = lang; }
         if (math) { cliFlags.math = math; }
+        if (mermaidConfigPath) { cliFlags.mermaidConfig = loadMermaidConfigFile(mermaidConfigPath); }
+        if (pdfTitle) { cliFlags.pdfTitle = pdfTitle; }
+        if (pdfAuthor) { cliFlags.pdfAuthor = pdfAuthor; }
+        if (pdfSubject) { cliFlags.pdfSubject = pdfSubject; }
         const mergedOptions = mergeConfig(fileConfig, cliFlags);
 
         const fmt = mergedOptions.format ?? 'pdf';
@@ -369,7 +413,7 @@ async function runSingle(
     }
 
     const markdown = await fs.readFile(resolvedInput, 'utf-8');
-    const result = await converter.convertString(markdown);
+    const result = await converter.convertString(markdown, dirname(resolvedInput));
     await fs.writeFile(resolvedOutput, result.outputBuffer);
     const elapsed = Date.now() - startTime;
 
@@ -398,7 +442,7 @@ async function runSingle(
                 const rebuildStart = Date.now();
                 try {
                     const md = await fs.readFile(resolvedInput, 'utf-8');
-                    const rebuildResult = await converter.convertString(md);
+                    const rebuildResult = await converter.convertString(md, dirname(resolvedInput));
                     await fs.writeFile(resolvedOutput, rebuildResult.outputBuffer);
                     consecutiveFailures = 0;
                     const time = new Date().toLocaleTimeString();
@@ -548,7 +592,7 @@ async function runBatch(
 
         try {
             const markdown = await fs.readFile(file, 'utf-8');
-            const result = await converter.convertString(markdown);
+            const result = await converter.convertString(markdown, dirname(resolve(file)));
             await fs.writeFile(outputPath, result.outputBuffer);
 
             if (shouldLog) {
@@ -587,7 +631,7 @@ async function runBatch(
                 process.exit(1);
             }
 
-            if (shouldLog) {
+            if (!jsonOutput) {
                 console.error(`[${i + 1}/${inputFiles.length}] FAILED: ${basename(file)} - ${errMsg}`);
             }
 
@@ -604,7 +648,7 @@ async function runBatch(
 
     if (jsonOutput) {
         console.log(JSON.stringify(jsonResults));
-    } else if (!quiet) {
+    } else if (!quiet || failed > 0) {
         const totalElapsed = Date.now() - batchStart;
         console.error(`Batch complete: ${succeeded} succeeded, ${failed} failed (${totalElapsed}ms)`);
     }
