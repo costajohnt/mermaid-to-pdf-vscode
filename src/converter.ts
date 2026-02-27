@@ -897,7 +897,7 @@ export class Converter {
         //     Supports <!-- pagebreak --> and <!-- pagebreak-before -->.
         const pagebreakAfterHtml  = '<div style="page-break-after: always; break-after: page;"></div>';
         const pagebreakBeforeHtml = '<div style="page-break-before: always; break-before: page;"></div>';
-        let processedHtml = bodyHtml
+        const processedHtml = bodyHtml
             .replace(/<!--\s*pagebreak-before\s*-->/gi, pagebreakBeforeHtml)
             .replace(/<!--\s*pagebreak\s*-->/gi, pagebreakAfterHtml);
 
