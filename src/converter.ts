@@ -1,6 +1,6 @@
 // src/converter.ts
-import { promises as fs, readFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { promises as fs, readFileSync, existsSync, statSync } from 'fs';
+import { join, dirname, resolve, extname } from 'path';
 import { createRequire } from 'module';
 import { Marked } from 'marked';
 import HTMLtoDOCX from 'html-to-docx';
@@ -203,6 +203,98 @@ function escapeHtml(str: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Local image embedding
+// ---------------------------------------------------------------------------
+
+/** Maximum file size for local image embedding (5 MB) */
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+/** MIME types for supported image extensions */
+const IMAGE_MIME_TYPES: Record<string, string> = {
+    '.png':  'image/png',
+    '.jpg':  'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif':  'image/gif',
+    '.svg':  'image/svg+xml',
+    '.webp': 'image/webp',
+};
+
+/**
+ * Find markdown image references with local paths and replace them with
+ * base64 data URIs.  Remote URLs (http://, https://) and data: URIs are
+ * left untouched.  Files that don't exist or exceed the size limit are
+ * skipped with a console.error warning.
+ *
+ * @param markdown - The raw markdown string
+ * @param basePath - Directory to resolve relative image paths against (defaults to cwd)
+ * @returns The markdown with local image paths replaced by data URIs
+ */
+export function embedLocalImages(markdown: string, basePath?: string): string {
+    const base = basePath || process.cwd();
+
+    // Match ![alt](path) — the path must not start with http://, https://, or data:
+    return markdown.replace(
+        /!\[([^\]]*)\]\(([^)]+)\)/g,
+        (match: string, alt: string, rawPath: string) => {
+            const trimmedPath = rawPath.trim();
+
+            // Skip remote URLs and data URIs
+            if (/^https?:\/\//i.test(trimmedPath) || /^data:/i.test(trimmedPath)) {
+                return match;
+            }
+
+            const absolutePath = resolve(base, trimmedPath);
+            const ext = extname(absolutePath).toLowerCase();
+            const mimeType = IMAGE_MIME_TYPES[ext];
+
+            if (!mimeType) {
+                // Unsupported extension — leave as-is
+                return match;
+            }
+
+            // Check if file exists
+            if (!existsSync(absolutePath)) {
+                console.error(`Warning: Local image not found, skipping: ${absolutePath}`);
+                return match;
+            }
+
+            // Check file size
+            let stat;
+            try {
+                stat = statSync(absolutePath);
+            } catch (err) {
+                console.error(`Warning: Could not stat local image, skipping: ${absolutePath}`);
+                return match;
+            }
+
+            if (stat.size > MAX_IMAGE_SIZE) {
+                console.error(`Warning: Local image exceeds 5 MB limit (${(stat.size / 1024 / 1024).toFixed(1)} MB), skipping: ${absolutePath}`);
+                return match;
+            }
+
+            // Read and encode
+            try {
+                const data = readFileSync(absolutePath);
+                const base64 = data.toString('base64');
+                return `![${alt}](data:${mimeType};base64,${base64})`;
+            } catch (err) {
+                console.error(`Warning: Failed to read local image, skipping: ${absolutePath}`);
+                return match;
+            }
+        },
+    );
+}
+
+/**
+ * Extract the text of the first ATX heading (# ...) from raw markdown.
+ * Returns undefined if no heading is found.
+ */
+function extractFirstHeading(markdown: string): string | undefined {
+    const match = markdown.match(/^#{1,6}\s+(.+)$/m);
+    return match ? match[1].trim() : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // HTML post-processing
 // ---------------------------------------------------------------------------
 
@@ -242,10 +334,13 @@ interface HtmlDocumentOptions {
     codeFont?: string;
     katexCss?: string;
     lang?: string;
+    pdfTitle?: string;
+    pdfAuthor?: string;
+    pdfSubject?: string;
 }
 
 function buildHtmlDocument(bodyHtml: string, opts: HtmlDocumentOptions): string {
-    const { theme, customCss, font, codeFont, katexCss, lang = 'en' } = opts;
+    const { theme, customCss, font, codeFont, katexCss, lang = 'en', pdfTitle, pdfAuthor, pdfSubject } = opts;
     const isDark = theme === 'dark';
     const bg        = isDark ? '#0d1117' : '#ffffff';
     const fg        = isDark ? '#e6edf3' : '#24292e';
@@ -255,11 +350,24 @@ function buildHtmlDocument(bodyHtml: string, opts: HtmlDocumentOptions): string 
     const bqColor   = isDark ? '#8b949e' : '#656d76';
     const linkColor = isDark ? '#58a6ff' : '#0969da';
 
+    // Build optional metadata tags
+    const metaTags: string[] = [];
+    if (pdfTitle) {
+        metaTags.push(`    <title>${escapeHtml(pdfTitle)}</title>`);
+    }
+    if (pdfAuthor) {
+        metaTags.push(`    <meta name="author" content="${escapeHtml(pdfAuthor)}">`);
+    }
+    if (pdfSubject) {
+        metaTags.push(`    <meta name="description" content="${escapeHtml(pdfSubject)}">`);
+    }
+    const metaBlock = metaTags.length > 0 ? '\n' + metaTags.join('\n') : '';
+
     return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src data:; font-src data:">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src data:; font-src data:">${metaBlock}
     <style>
         * {
             margin: 0;
@@ -582,7 +690,7 @@ export class Converter {
      */
     async convertFile(inputPath: string, outputPath: string): Promise<ConvertFileResult> {
         const markdown = await fs.readFile(inputPath, 'utf-8');
-        const result = await this._convert(markdown);
+        const result = await this._convert(markdown, dirname(resolve(inputPath)));
         if (result.htmlString !== undefined) {
             const buf = Buffer.from(result.htmlString, 'utf-8');
             await fs.writeFile(outputPath, buf);
@@ -594,19 +702,23 @@ export class Converter {
 
     /**
      * Convert a markdown string to a PDF, HTML, or DOCX Buffer with metadata.
+     * @param basePath - Optional directory to resolve relative image paths against (defaults to cwd)
      */
-    async convertString(markdown: string): Promise<ConvertStringResult> {
-        return this._convert(markdown);
+    async convertString(markdown: string, basePath?: string): Promise<ConvertStringResult> {
+        return this._convert(markdown, basePath);
     }
 
     // ------------------------------------------------------------------
     // Core pipeline
     // ------------------------------------------------------------------
 
-    private async _convert(markdown: string): Promise<ConvertStringResult> {
+    private async _convert(markdown: string, basePath?: string): Promise<ConvertStringResult> {
         if (markdown.length > 10 * 1024 * 1024) {
             throw new Error('Markdown content too large. Maximum size is 10 MB.');
         }
+
+        // 0. Embed local images as base64 data URIs
+        markdown = embedLocalImages(markdown, basePath);
 
         const dims = computePageDimensions(this.options);
 
@@ -653,7 +765,7 @@ export class Converter {
             const sessions: MermaidRenderSession[] = [];
             try {
                 for (let i = 0; i < concurrency; i++) {
-                    sessions.push(await createRenderSession(mermaidTheme));
+                    sessions.push(await createRenderSession(mermaidTheme, this.options.mermaidConfig));
                 }
 
                 // Distribute work across sessions via a shared index counter.
@@ -774,6 +886,14 @@ export class Converter {
             }
         }
 
+        // 3b. Replace pagebreak directives with page-break divs.
+        //     Supports <!-- pagebreak --> and <!-- pagebreak-before -->.
+        const pagebreakAfterHtml  = '<div style="page-break-after: always; break-after: page;"></div>';
+        const pagebreakBeforeHtml = '<div style="page-break-before: always; break-before: page;"></div>';
+        let processedHtml = bodyHtml
+            .replace(/<!--\s*pagebreak-before\s*-->/gi, pagebreakBeforeHtml)
+            .replace(/<!--\s*pagebreak\s*-->/gi, pagebreakAfterHtml);
+
         // 4. Resolve custom CSS (file path or inline string)
         let resolvedCss: string | undefined;
         if (this.options.customCss) {
@@ -786,7 +906,10 @@ export class Converter {
 
         // 5. Move headings inside their adjacent diagram containers (div or figure)
         //    so Chromium's PDF renderer can't orphan them on a prior page.
-        const adjustedHtml = attachHeadingsToDiagrams(bodyHtml);
+        const adjustedHtml = attachHeadingsToDiagrams(processedHtml);
+        // Resolve PDF title: explicit option > auto-detect from first heading
+        const resolvedTitle = this.options.pdfTitle ?? extractFirstHeading(markdown);
+
         const fullHtml = buildHtmlDocument(adjustedHtml, {
             theme: this.options.theme,
             customCss: resolvedCss,
@@ -794,6 +917,9 @@ export class Converter {
             codeFont: this.options.codeFont,
             katexCss: this.options.math ? getKatexCss() : undefined,
             lang: this.options.lang,
+            pdfTitle: resolvedTitle,
+            pdfAuthor: this.options.pdfAuthor,
+            pdfSubject: this.options.pdfSubject,
         });
 
         // 6. If format is 'html', return the self-contained HTML directly

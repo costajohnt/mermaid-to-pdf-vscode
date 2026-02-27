@@ -73,8 +73,16 @@ export interface MermaidRenderSession {
 /**
  * Create a render session with a single Puppeteer page and pre-loaded
  * mermaid library. The session must be closed when rendering is complete.
+ *
+ * @param theme - Mermaid theme name (e.g. 'default', 'dark')
+ * @param mermaidConfig - Optional user-provided Mermaid configuration object.
+ *   Merged with required settings. securityLevel and useMaxWidth are always
+ *   enforced and cannot be overridden.
  */
-export async function createRenderSession(theme: string = 'default'): Promise<MermaidRenderSession> {
+export async function createRenderSession(
+    theme: string = 'default',
+    mermaidConfig?: Record<string, unknown>,
+): Promise<MermaidRenderSession> {
     const browser = await getBrowser();
     const page = await browser.newPage();
 
@@ -101,32 +109,41 @@ export async function createRenderSession(theme: string = 'default'): Promise<Me
             { timeout: RENDER_TIMEOUT },
         );
 
-        // Initialize mermaid once with useMaxWidth: false on ALL diagram types
-        await page.evaluate((mermaidTheme: string) => {
+        // Initialize mermaid once with useMaxWidth: false on ALL diagram types.
+        // User config is merged first, then enforced settings are applied on top
+        // so securityLevel and useMaxWidth cannot be overridden.
+        await page.evaluate((mermaidTheme: string, userConfig: Record<string, unknown> | null) => {
             const mermaid = (window as unknown as WindowWithMermaid).mermaid!;
-            mermaid.initialize({
+
+            // Diagram type keys that require useMaxWidth: false
+            const diagramTypes = [
+                'flowchart', 'sequence', 'gantt', 'journey', 'timeline',
+                'class', 'state', 'er', 'pie', 'quadrantChart',
+                'requirement', 'mindmap', 'gitGraph', 'c4', 'sankey', 'block',
+            ] as const;
+
+            // Start with user config (if any), then enforce required settings
+            const config: Record<string, unknown> = {
+                ...(userConfig ?? {}),
                 startOnLoad: false,
                 theme: mermaidTheme,
                 securityLevel: 'strict',
-                logLevel: 'error',
-                flowchart: { useMaxWidth: false },
-                sequence: { useMaxWidth: false },
-                gantt: { useMaxWidth: false },
-                journey: { useMaxWidth: false },
-                timeline: { useMaxWidth: false },
-                class: { useMaxWidth: false },
-                state: { useMaxWidth: false },
-                er: { useMaxWidth: false },
-                pie: { useMaxWidth: false },
-                quadrantChart: { useMaxWidth: false },
-                requirement: { useMaxWidth: false },
-                mindmap: { useMaxWidth: false },
-                gitGraph: { useMaxWidth: false },
-                c4: { useMaxWidth: false },
-                sankey: { useMaxWidth: false },
-                block: { useMaxWidth: false },
-            });
-        }, theme);
+                logLevel: (userConfig?.logLevel as string) ?? 'error',
+            };
+
+            // Enforce useMaxWidth: false on all diagram types, merging with
+            // any user-provided diagram-type-specific config
+            for (const dt of diagramTypes) {
+                const userDt = userConfig?.[dt];
+                if (userDt && typeof userDt === 'object' && !Array.isArray(userDt)) {
+                    config[dt] = { ...(userDt as Record<string, unknown>), useMaxWidth: false };
+                } else {
+                    config[dt] = { useMaxWidth: false };
+                }
+            }
+
+            mermaid.initialize(config);
+        }, theme, mermaidConfig ?? null);
     } catch (setupErr) {
         // If session setup fails, close the page to avoid resource leaks
         try { await page.close(); } catch { /* ignore close errors during cleanup */ }
@@ -279,13 +296,15 @@ async function renderOnPage(
  *
  * @param code - The Mermaid diagram source code
  * @param theme - Optional mermaid theme (default: 'default')
+ * @param mermaidConfig - Optional custom Mermaid configuration
  * @returns A RenderedDiagram with the SVG string and pixel dimensions
  */
 export async function renderMermaidToSvg(
     code: string,
     theme: string = 'default',
+    mermaidConfig?: Record<string, unknown>,
 ): Promise<RenderedDiagram> {
-    const session = await createRenderSession(theme);
+    const session = await createRenderSession(theme, mermaidConfig);
     try {
         return await session.render(code);
     } finally {

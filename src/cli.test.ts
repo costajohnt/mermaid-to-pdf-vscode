@@ -251,6 +251,8 @@ Some text after the diagram.
 });
 
 describe('CLI --watch flag', () => {
+    const cliPath = join(process.cwd(), 'dist', 'cli.js');
+
     test('--watch flag is parsed (long form)', async () => {
         // --watch without an input file should error with a specific message
         const { stderr, code } = await runCliWithStdin(
@@ -291,5 +293,112 @@ describe('CLI --watch flag', () => {
             stderr.includes('cannot watch stdin'),
             `stderr should mention cannot watch stdin, got: ${stderr}`,
         );
+    });
+
+    test('--watch with a non-existent file produces an error', async () => {
+        const nonExistentFile = join(tmpdir(), 'cli-watch-noexist-' + Date.now() + '.md');
+
+        try {
+            await execFileAsync('node', [
+                cliPath,
+                nonExistentFile,
+                '--watch',
+            ], { timeout: 30_000 });
+            assert.fail('CLI should have exited with non-zero code');
+        } catch (err: unknown) {
+            const execErr = err as { stderr?: string; code?: number };
+            assert.ok(
+                execErr.stderr?.includes('does not exist'),
+                `stderr should mention file does not exist, got: ${execErr.stderr}`,
+            );
+        }
+    });
+});
+
+describe('CLI --format flag', () => {
+    const cliPath = join(process.cwd(), 'dist', 'cli.js');
+
+    test('--format html produces an .html file', async () => {
+        const tmpDir = await fs.mkdtemp(join(tmpdir(), 'cli-format-html-'));
+        const inputFile = join(tmpDir, 'doc.md');
+        const outputFile = join(tmpDir, 'doc.html');
+        await fs.writeFile(inputFile, '# HTML Test\n\nSome content.\n');
+
+        try {
+            const { stdout } = await execFileAsync('node', [
+                cliPath,
+                inputFile,
+                '-f', 'html',
+                '-o', outputFile,
+                '--json',
+            ], { timeout: 60_000 });
+
+            const result = JSON.parse(stdout.trim());
+            assert.ok(result.outputPath.endsWith('.html'), 'outputPath should end with .html');
+            assert.ok(result.fileSize > 0, 'fileSize should be > 0');
+
+            // Verify the file exists and contains HTML content
+            const content = await fs.readFile(outputFile, 'utf-8');
+            assert.ok(content.includes('<!DOCTYPE html>'), 'output should be valid HTML');
+            assert.ok(content.includes('HTML Test'), 'output should contain the heading');
+        } finally {
+            await fs.rm(tmpDir, { recursive: true });
+        }
+    });
+
+    test('--format docx produces a .docx file', async () => {
+        const tmpDir = await fs.mkdtemp(join(tmpdir(), 'cli-format-docx-'));
+        const inputFile = join(tmpDir, 'doc.md');
+        const outputFile = join(tmpDir, 'doc.docx');
+        await fs.writeFile(inputFile, '# DOCX Test\n\nSome content for DOCX.\n');
+
+        try {
+            const { stdout } = await execFileAsync('node', [
+                cliPath,
+                inputFile,
+                '-f', 'docx',
+                '-o', outputFile,
+                '--json',
+            ], { timeout: 60_000 });
+
+            const result = JSON.parse(stdout.trim());
+            assert.ok(result.outputPath.endsWith('.docx'), 'outputPath should end with .docx');
+            assert.ok(result.fileSize > 0, 'fileSize should be > 0');
+
+            // Verify the DOCX file exists and has content
+            const stat = await fs.stat(outputFile);
+            assert.ok(stat.size > 0, 'DOCX file should be non-empty');
+
+            // DOCX files are ZIP-based; the first bytes should be the ZIP magic number PK
+            const buf = await fs.readFile(outputFile);
+            assert.equal(buf[0], 0x50, 'DOCX should start with PK (0x50)');
+            assert.equal(buf[1], 0x4B, 'DOCX should start with PK (0x4B)');
+        } finally {
+            await fs.rm(tmpDir, { recursive: true });
+        }
+    });
+
+    test('--format invalid produces an error', async () => {
+        const tmpDir = await fs.mkdtemp(join(tmpdir(), 'cli-format-invalid-'));
+        const inputFile = join(tmpDir, 'doc.md');
+        await fs.writeFile(inputFile, '# Test\n');
+
+        try {
+            await execFileAsync('node', [
+                cliPath,
+                inputFile,
+                '-f', 'pptx',
+            ], { timeout: 30_000 });
+            assert.fail('CLI should have exited with non-zero code for invalid format');
+        } catch (err: unknown) {
+            const execErr = err as { stderr?: string; code?: number };
+            assert.ok(
+                execErr.stderr?.includes('Invalid format') ||
+                execErr.stderr?.includes('Must be'),
+                `stderr should mention invalid format, got: ${execErr.stderr}`,
+            );
+        } finally {
+            await fs.rm(tmpDir, { recursive: true });
+        }
     });
 });

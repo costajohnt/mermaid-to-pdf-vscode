@@ -36,6 +36,7 @@ Options:
   --code-font <family>    Set code/pre font-family (falls back gracefully)
   --lang <code>           Set document language (BCP 47 code, default: en)
   --math                  Enable KaTeX math equation rendering
+  -q, --quiet             Suppress progress output on stderr
   --json                  Output results as JSON to stdout
   -h, --help              Show this help message
 
@@ -80,6 +81,7 @@ Examples:
     let codeFont: string | undefined;
     let lang: string | undefined;
     let jsonOutput = false;
+    let quiet = false;
     let math = false;
     let watch = false;
 
@@ -201,6 +203,10 @@ Examples:
             case '--math':
                 math = true;
                 break;
+            case '-q':
+            case '--quiet':
+                quiet = true;
+                break;
             case '--json':
                 jsonOutput = true;
                 break;
@@ -264,10 +270,10 @@ Examples:
             console.error('Error: No input files matched. Use --help for usage.');
             process.exit(1);
         } else if (isBatchMode) {
-            await runBatch(inputFiles, mergedOptions, ext, outdir, jsonOutput);
+            await runBatch(inputFiles, mergedOptions, ext, outdir, jsonOutput, quiet);
         } else {
             // Single file mode — backward compatible
-            await runSingle(inputFiles[0], mergedOptions, ext, outputFile, jsonOutput, watch);
+            await runSingle(inputFiles[0], mergedOptions, ext, outputFile, jsonOutput, quiet, watch);
         }
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -341,6 +347,7 @@ async function runSingle(
     ext: string,
     outputFile: string | null,
     jsonOutput: boolean,
+    quiet: boolean,
     watch: boolean,
 ): Promise<void> {
     const startTime = Date.now();
@@ -355,24 +362,27 @@ async function runSingle(
     const resolvedOutput = resolve(outputFile);
     const converter = new Converter(mergedOptions);
 
-    if (!jsonOutput) {
+    const shouldLog = !jsonOutput && !quiet;
+
+    if (shouldLog) {
         console.error(`Converting to ${resolvedOutput}...`);
     }
 
     const markdown = await fs.readFile(resolvedInput, 'utf-8');
     const result = await converter.convertString(markdown);
     await fs.writeFile(resolvedOutput, result.outputBuffer);
+    const elapsed = Date.now() - startTime;
 
     if (jsonOutput) {
         const output: CliJsonOutput = {
             outputPath: resolvedOutput,
             fileSize: result.fileSize,
             diagramCount: result.diagramCount,
-            processingTimeMs: Date.now() - startTime,
+            processingTimeMs: elapsed,
         };
         console.log(JSON.stringify(output));
-    } else {
-        console.error(`Done. ${(result.fileSize / 1024).toFixed(1)} KB written.`);
+    } else if (!quiet) {
+        console.error(`Converted to ${resolvedOutput} (${elapsed}ms)`);
     }
 
     // Watch mode: keep browser alive and re-convert on file changes
@@ -480,6 +490,7 @@ async function runBatch(
     ext: string,
     outdir: string | null,
     jsonOutput: boolean,
+    quiet: boolean,
 ): Promise<void> {
     if (outdir) {
         try {
@@ -508,6 +519,8 @@ async function runBatch(
     }
 
     const converter = new Converter(mergedOptions);
+    const batchStart = Date.now();
+    const shouldLog = !jsonOutput && !quiet;
     let succeeded = 0;
     let failed = 0;
 
@@ -527,8 +540,8 @@ async function runBatch(
             ? resolve(join(outdir, /\.md$/i.test(basename(file)) ? basename(file).replace(/\.md$/i, ext) : basename(file) + ext))
             : /\.md$/i.test(file) ? file.replace(/\.md$/i, ext) : file + ext;
 
-        if (!jsonOutput) {
-            console.error(`[${i + 1}/${inputFiles.length}] ${file}`);
+        if (shouldLog) {
+            console.error(`[${i + 1}/${inputFiles.length}] Converting ${basename(file)}...`);
         }
 
         const fileStart = Date.now();
@@ -538,8 +551,9 @@ async function runBatch(
             const result = await converter.convertString(markdown);
             await fs.writeFile(outputPath, result.outputBuffer);
 
-            if (!jsonOutput) {
-                console.error(`  → ${outputPath} (${(result.fileSize / 1024).toFixed(1)} KB)`);
+            if (shouldLog) {
+                const fileElapsed = Date.now() - fileStart;
+                console.error(`[${i + 1}/${inputFiles.length}] Done: ${basename(file)} (${fileElapsed}ms)`);
             }
 
             if (jsonOutput) {
@@ -573,8 +587,8 @@ async function runBatch(
                 process.exit(1);
             }
 
-            if (!jsonOutput) {
-                console.error(`  ✗ Error: ${errMsg}`);
+            if (shouldLog) {
+                console.error(`[${i + 1}/${inputFiles.length}] FAILED: ${basename(file)} - ${errMsg}`);
             }
 
             if (jsonOutput) {
@@ -590,8 +604,9 @@ async function runBatch(
 
     if (jsonOutput) {
         console.log(JSON.stringify(jsonResults));
-    } else {
-        console.error(`\nBatch complete: ${succeeded} succeeded, ${failed} failed out of ${inputFiles.length} files.`);
+    } else if (!quiet) {
+        const totalElapsed = Date.now() - batchStart;
+        console.error(`Batch complete: ${succeeded} succeeded, ${failed} failed (${totalElapsed}ms)`);
     }
 
     if (failed > 0) { process.exit(1); }
