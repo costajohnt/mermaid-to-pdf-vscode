@@ -23,8 +23,8 @@ The converter library (`markdown-mermaid-converter-cli`) is installed automatica
 ### Option 2: Install from Source
 
 ```bash
-git clone https://github.com/costajohnt/markdown-mermaid-converter.git
-cd markdown-mermaid-converter
+git clone https://github.com/costajohnt/mermaid-to-pdf-vscode.git
+cd mermaid-to-pdf-vscode
 
 # Build the CLI
 npm install
@@ -345,8 +345,8 @@ If installing from source, build the CLI package first (`npm run build` in the r
 ### Building from Source
 
 ```bash
-git clone https://github.com/costajohnt/markdown-mermaid-converter.git
-cd markdown-mermaid-converter
+git clone https://github.com/costajohnt/mermaid-to-pdf-vscode.git
+cd mermaid-to-pdf-vscode
 npm install
 npm run build            # the MCP server imports the CLI package's dist/
 cd mermaid-to-pdf-mcp
@@ -367,7 +367,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Links
 
-- **Repository**: [GitHub](https://github.com/costajohnt/markdown-mermaid-converter)
-- **CLI Tool**: [Markdown Mermaid Converter](https://github.com/costajohnt/markdown-mermaid-converter)
-- **Issues**: [GitHub Issues](https://github.com/costajohnt/markdown-mermaid-converter/issues)
+- **Repository**: [GitHub](https://github.com/costajohnt/mermaid-to-pdf-vscode)
+- **CLI Tool**: [Markdown Mermaid Converter](https://github.com/costajohnt/mermaid-to-pdf-vscode)
+- **Issues**: [GitHub Issues](https://github.com/costajohnt/mermaid-to-pdf-vscode/issues)
 - **MCP Protocol**: [Model Context Protocol](https://modelcontextprotocol.io)

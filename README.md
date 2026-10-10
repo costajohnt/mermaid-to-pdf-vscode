@@ -334,8 +334,8 @@ markdown-mermaid-converter architecture.md -o architecture.pdf -t light
 
 ## 🔗 Links
 
-- **Repository**: [https://github.com/costajohnt/markdown-mermaid-converter](https://github.com/costajohnt/markdown-mermaid-converter)
-- **Issues**: [GitHub Issues](https://github.com/costajohnt/markdown-mermaid-converter/issues)
+- **Repository**: [https://github.com/costajohnt/mermaid-to-pdf-vscode](https://github.com/costajohnt/mermaid-to-pdf-vscode)
+- **Issues**: [GitHub Issues](https://github.com/costajohnt/mermaid-to-pdf-vscode/issues)
 - **CLI Package**: [markdown-mermaid-converter-cli](https://www.npmjs.com/package/markdown-mermaid-converter-cli)
 - **MCP Package**: [markdown-mermaid-converter-mcp](https://www.npmjs.com/package/markdown-mermaid-converter-mcp)
 - **Mermaid Documentation**: [https://mermaid.js.org/](https://mermaid.js.org/)

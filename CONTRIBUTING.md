@@ -6,8 +6,8 @@ Thanks for your interest in contributing! This guide covers everything you need 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/costajohnt/markdown-mermaid-converter.git
-   cd markdown-mermaid-converter
+   git clone https://github.com/costajohnt/mermaid-to-pdf-vscode.git
+   cd mermaid-to-pdf-vscode
    ```
 
 2. **Install dependencies** (requires Node.js 22.12+)
@@ -114,7 +114,7 @@ flowchart LR
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/costajohnt/markdown-mermaid-converter/issues). Include:
+Use [GitHub Issues](https://github.com/costajohnt/mermaid-to-pdf-vscode/issues). Include:
 - Steps to reproduce
 - Expected vs. actual behavior
 - Node.js version and OS

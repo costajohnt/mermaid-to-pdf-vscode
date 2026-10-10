@@ -2,7 +2,7 @@
 
 ## Developer Information
 - **GitHub Username**: costajohnt
-- **Repository**: https://github.com/costajohnt/markdown-mermaid-converter
+- **Repository**: https://github.com/costajohnt/mermaid-to-pdf-vscode
 - **Main Branch**: main
 
 ## Project Context
