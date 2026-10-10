@@ -11,7 +11,7 @@
 
 **Please do not open public issues for security vulnerabilities.**
 
-Instead, use [GitHub Security Advisories](https://github.com/costajohnt/markdown-mermaid-converter/security/advisories/new) to report vulnerabilities privately. You will receive a response within 7 days acknowledging the report, and we will work with you to understand and address the issue before any public disclosure.
+Instead, use [GitHub Security Advisories](https://github.com/costajohnt/mermaid-to-pdf-vscode/security/advisories/new) to report vulnerabilities privately. You will receive a response within 7 days acknowledging the report, and we will work with you to understand and address the issue before any public disclosure.
 
 ## Security Considerations
 
