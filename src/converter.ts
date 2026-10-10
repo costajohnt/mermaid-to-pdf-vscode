@@ -978,9 +978,11 @@ export class Converter {
         const page = await browser.newPage();
 
         try {
-            await page.setContent(html, {
-                waitUntil: ['domcontentloaded', 'networkidle0'],
-            });
+            // Puppeteer 25 dropped networkidle* for setContent. 'load' waits
+            // for images and stylesheets in the document; fonts requested
+            // by CSS after load are awaited explicitly below.
+            await page.setContent(html, { waitUntil: 'load' });
+            await page.evaluate(() => document.fonts.ready.then(() => undefined));
 
             // Wait for SVGs to paint (two rAF frames)
             await page.evaluate(

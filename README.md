@@ -8,7 +8,7 @@ Transform your ideas into professional documents with beautiful diagrams - just 
 
 ![MCP Server](https://img.shields.io/badge/MCP-Server-purple)
 ![CLI Tool](https://img.shields.io/badge/CLI-Tool-blue)
-![Node.js](https://img.shields.io/badge/node.js-18%2B-brightgreen)
+![Node.js](https://img.shields.io/badge/node.js-22.12%2B-brightgreen)
 
 ## 🤖 For AI Users
 
@@ -326,7 +326,7 @@ markdown-mermaid-converter architecture.md -o architecture.pdf -t light
 
 ## 🔧 Requirements
 
-- **Node.js**: 18.x or higher
+- **Node.js**: 22.12 or higher
 - **Operating System**: Windows 10+, macOS 10.14+, or Linux (Ubuntu 18.04+)
 - **Memory**: 2GB RAM minimum (4GB recommended)
 

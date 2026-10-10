@@ -37,7 +37,7 @@ const converter = new MermaidConverter(logger);
 const server = new Server(
   {
     name: 'markdown-mermaid-converter',
-    version: '1.0.0',
+    version: '3.0.0',
     description: 'MCP server for converting Markdown with Mermaid diagrams to various formats - optimized for AI integration',
   },
   {

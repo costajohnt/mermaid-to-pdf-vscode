@@ -1,7 +1,7 @@
 {
   "name": "markdown-mermaid-converter-cli",
   "description": "CLI tool to convert Markdown files with Mermaid diagrams to PDF",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "costajohnt",
   "repository": {
     "type": "git",
@@ -9,7 +9,7 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.12.0"
   },
   "type": "module",
   "main": "./dist/index.js",
@@ -21,9 +21,17 @@
   "bin": {
     "markdown-mermaid-converter": "dist/cli.js"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "CHANGELOG.md"
+  ],
   "scripts": {
-    "build": "tsc && cp -r src/vendor dist/vendor",
-    "postinstall": "mkdir -p src/vendor && cp node_modules/mermaid/dist/mermaid.min.js src/vendor/mermaid.min.js",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prebuild": "node scripts/vendor-mermaid.js",
+    "build": "tsc && node -e \"require('fs').cpSync('src/vendor','dist/vendor',{recursive:true})\"",
     "start": "node dist/cli.js",
     "dev": "tsx src/cli.ts",
     "test": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js dist/config.test.js dist/diagramTypes.test.js dist/boundary.test.js dist/browserCrash.test.js dist/math.test.js dist/accessibility.test.js dist/batch.test.js",
@@ -31,7 +39,9 @@
     "test:e2e": "npm run build && node --test dist/e2e.test.js",
     "test:all": "npm run build && node --test dist/cli.test.js dist/diagramCache.test.js dist/mermaidRenderer.test.js dist/converter.test.js dist/types.test.js dist/config.test.js dist/diagramTypes.test.js dist/boundary.test.js dist/browserCrash.test.js dist/math.test.js dist/accessibility.test.js dist/batch.test.js dist/e2e.test.js && cd mermaid-to-pdf-mcp && npm test",
     "benchmark": "npx tsx benchmarks/parse.bench.ts",
-    "lint": "eslint src/ mermaid-to-pdf-mcp/src/"
+    "lint": "eslint src/ mermaid-to-pdf-mcp/src/",
+    "prepack": "npm run clean && npm run build",
+    "check:package": "node scripts/check-package.js"
   },
   "keywords": [
     "markdown",
@@ -56,13 +66,13 @@
   "dependencies": {
     "glob": "^13.0.6",
     "html-to-docx": "^1.8.0",
-    "katex": "^0.16.33",
+    "katex": "^0.18.11",
     "marked": "^12.0.0",
-    "marked-katex-extension": "^5.1.7",
-    "mermaid": "^11.12.3",
-    "puppeteer": "^23.0.2"
+    "marked-katex-extension": "^5.1.13",
+    "mermaid": "^11.17.2",
+    "puppeteer": "^25.13.0"
   },
   "overrides": {
-    "basic-ftp": ">=5.2.0"
+    "image-size": "^2.0.4"
   }
 }
