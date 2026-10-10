@@ -41,6 +41,9 @@ under 1.0.0 below, which was never published. The MCP server package
   now `prebuild`
 - Published package now includes type declarations and no longer ships
   development files
+- The MCP server package installs from npm: it now depends on
+  `markdown-mermaid-converter-cli` instead of importing `../../dist` from the
+  repo checkout, and the release workflow publishes it after the CLI
 
 ## [1.0.0] - 2026-02-24
 

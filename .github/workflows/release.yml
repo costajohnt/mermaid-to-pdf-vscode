@@ -27,15 +27,34 @@ jobs:
     - name: Build CLI tool
       run: npm run build
 
+    # The MCP server depends on markdown-mermaid-converter-cli; link it to
+    # this checkout so it builds and tests against the version being released.
+    - name: Install MCP server dependencies
+      run: cd mermaid-to-pdf-mcp && npm run install:local-cli
+
     - name: Run tests
       run: npm run test:all
       timeout-minutes: 10
 
-    - name: Check the packed tarball installs and runs
+    - name: Check the packed tarballs (CLI and MCP server) install and run
       run: npm run check:package
 
     - name: Publish to NPM
       run: npm publish --provenance --access public
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    # Published after the CLI, which it depends on. The two packages have
+    # independent versions, so skip when this MCP version is already on npm.
+    - name: Publish MCP server to NPM
+      working-directory: mermaid-to-pdf-mcp
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        if [ -n "$(npm view "markdown-mermaid-converter-mcp@$VERSION" version 2>/dev/null)" ]; then
+          echo "markdown-mermaid-converter-mcp@$VERSION is already published, skipping"
+        else
+          npm publish --provenance --access public
+        fi
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

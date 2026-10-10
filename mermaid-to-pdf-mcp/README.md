@@ -8,7 +8,7 @@
 - **Multiple diagram types**: Flowcharts, sequence diagrams, class diagrams, ER diagrams, and more
 - **SVG-based rendering**: Diagrams are rendered as SVGs with measured layout for accurate sizing
 - **Configurable**: Themes and page sizes
-- **CLI-backed**: Thin wrapper around the `markdown-mermaid-converter` CLI for reliable, consistent output
+- **CLI-backed**: Uses the `markdown-mermaid-converter-cli` package as a library, so output matches the CLI
 
 ## Installation
 
@@ -18,11 +18,7 @@
 npm install -g markdown-mermaid-converter-mcp
 ```
 
-**Note:** The MCP server requires the `markdown-mermaid-converter` CLI to be installed and available on your PATH:
-
-```bash
-npm install -g markdown-mermaid-converter
-```
+The converter library (`markdown-mermaid-converter-cli`) is installed automatically as a dependency. Nothing needs to be on your PATH. If you also want the command-line tool, install it separately with `npm install -g markdown-mermaid-converter-cli`.
 
 ### Option 2: Install from Source
 
@@ -34,9 +30,9 @@ cd markdown-mermaid-converter
 npm install
 npm run build
 
-# Build the MCP server
+# Build the MCP server against the CLI in this checkout
 cd mermaid-to-pdf-mcp
-npm install
+npm run install:local-cli
 npm run build
 npm link
 ```
@@ -350,8 +346,11 @@ If installing from source, build the CLI package first (`npm run build` in the r
 
 ```bash
 git clone https://github.com/costajohnt/markdown-mermaid-converter.git
-cd markdown-mermaid-converter/mermaid-to-pdf-mcp
+cd markdown-mermaid-converter
 npm install
+npm run build            # the MCP server imports the CLI package's dist/
+cd mermaid-to-pdf-mcp
+npm run install:local-cli  # installs deps, links markdown-mermaid-converter-cli to the checkout
 npm run build
 ```
 

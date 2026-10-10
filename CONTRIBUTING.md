@@ -61,7 +61,7 @@ src/                    # CLI tool (main codebase)
   diagramCache.ts       # Simple cache for rendered diagrams
   types.ts              # Shared interfaces and constants
   vendor/               # Bundled mermaid.min.js (no CDN dependency)
-mermaid-to-pdf-mcp/     # MCP server (thin wrapper that shells out to CLI)
+mermaid-to-pdf-mcp/     # MCP server (imports the CLI package as a library)
 test-fixtures/          # Sample files for testing
 ```
 
@@ -102,7 +102,7 @@ flowchart LR
 | `src/diagramCache.ts` | Diagram caching -- simple in-memory cache keyed by mermaid code + theme, avoids re-rendering duplicate diagrams |
 | `src/types.ts` | Shared types and constants -- `ConversionOptions`, `PageSize`, `RenderedDiagram`, defaults, validation constants, `CliJsonOutput` interface |
 | `src/vendor/mermaid.min.js` | Bundled Mermaid IIFE (v11.x) -- copied from `node_modules` by postinstall script, no network dependency at runtime |
-| `mermaid-to-pdf-mcp/` | MCP server -- thin wrapper that shells out to the CLI binary, exposes `convert_markdown_to_pdf` and `convert_markdown_to_pdf_data` tools |
+| `mermaid-to-pdf-mcp/` | MCP server -- depends on `markdown-mermaid-converter-cli` and calls it as a library, exposes `convert_markdown_to_pdf` and `convert_markdown_to_pdf_data` tools |
 
 ## Submitting a Pull Request
 

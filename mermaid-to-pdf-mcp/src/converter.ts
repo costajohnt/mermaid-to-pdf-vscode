@@ -2,11 +2,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ConversionOptions, ConversionResult, FileConversionResult } from './types.js';
 
-// Import directly from the CLI package's compiled output
-// This avoids spawning a subprocess per request and lets us reuse
-// the browser across multiple conversions.
-import { Converter, closePdfBrowser } from '../../dist/index.js';
-import { closeBrowser } from '../../dist/mermaidRenderer.js';
+// Use the CLI package as a library (a declared dependency, so this resolves in
+// an npm install as well as in a repo checkout). This avoids spawning a
+// subprocess per request and lets us reuse the browser across conversions.
+import { Converter, closePdfBrowser, closeBrowser } from 'markdown-mermaid-converter-cli';
 
 export interface Logger {
     info(obj: unknown, msg?: string): void;
