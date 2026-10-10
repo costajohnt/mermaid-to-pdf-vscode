@@ -5,7 +5,7 @@ All notable changes to Markdown Mermaid Converter will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-10-10
 
 First npm release since 1.0.3 (2025-08-06); it also contains everything listed
 under 1.0.0 below, which was never published. The MCP server package
