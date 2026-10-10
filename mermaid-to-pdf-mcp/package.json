@@ -8,7 +8,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "test": "tsc && node --test dist/index.test.js"
+    "test": "tsc && node --test dist/index.test.js",
+    "prepack": "tsc",
+    "install:local-cli": "npm install --no-save --no-audit --no-fund .."
   },
   "keywords": [
     "mcp",
@@ -26,7 +28,8 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "markdown-mermaid-converter-cli": "^2.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -35,5 +38,16 @@
   },
   "bin": {
     "markdown-mermaid-converter-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/costajohnt/markdown-mermaid-converter.git",
+    "directory": "mermaid-to-pdf-mcp"
   }
 }
