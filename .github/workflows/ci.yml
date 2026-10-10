@@ -55,6 +55,10 @@ jobs:
         NODE_ENV: test
       timeout-minutes: 5
 
+    - name: Pack and install the published package
+      run: npm run check:package
+      timeout-minutes: 5
+
     - name: Build MCP server
       run: cd mermaid-to-pdf-mcp && npm install && npm run build
 

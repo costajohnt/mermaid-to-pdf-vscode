@@ -5,6 +5,43 @@ All notable changes to Markdown Mermaid Converter will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - Unreleased
+
+First npm release since 1.0.3 (2025-08-06); it also contains everything listed
+under 1.0.0 below, which was never published. The MCP server package
+(`markdown-mermaid-converter-mcp`) moves to 3.0.0 for the same Node.js change.
+
+### Breaking
+
+- Requires Node.js 22.12 or later (Puppeteer 25). Node.js 18 and 20 are no
+  longer supported.
+
+### Added
+
+- Output formats: HTML (#68) and DOCX (#70)
+- Page numbers, custom CSS, font selection (#68)
+- `.mermaidrc` config file support, MCP diagram caching, `validate_markdown`
+  MCP tool (#69)
+- Batch processing, watch mode, KaTeX math, accessibility improvements (#70)
+- Image embedding, Mermaid config, page breaks, PDF metadata, progress
+  logging (#78)
+
+### Changed
+
+- Browser consolidation and concurrent diagram rendering (#63)
+- Upgraded Puppeteer to 25, Mermaid to 11.17, KaTeX to 0.18 and the MCP SDK
+  to 1.32 to clear high-severity advisories
+
+### Fixed
+
+- Security hardening (#62)
+- The installed `markdown-mermaid-converter` bin did nothing when run through
+  npm's `node_modules/.bin` symlink
+- Package installs no longer fail: the dev-only `postinstall` vendoring step is
+  now `prebuild`
+- Published package now includes type declarations and no longer ships
+  development files
+
 ## [1.0.0] - 2026-02-24
 
 ### Changed

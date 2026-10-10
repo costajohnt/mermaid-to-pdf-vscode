@@ -8,6 +8,9 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the GitHub release
+      id-token: write   # npm provenance attestation
 
     steps:
     - uses: actions/checkout@v4
@@ -28,8 +31,11 @@ jobs:
       run: npm run test:all
       timeout-minutes: 10
 
+    - name: Check the packed tarball installs and runs
+      run: npm run check:package
+
     - name: Publish to NPM
-      run: npm publish
+      run: npm publish --provenance --access public
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

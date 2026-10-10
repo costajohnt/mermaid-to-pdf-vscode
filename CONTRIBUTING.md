@@ -14,12 +14,18 @@ Thanks for your interest in contributing! This guide covers everything you need 
    ```bash
    npm install
    ```
-   This also runs a `postinstall` script that copies the bundled Mermaid IIFE into `src/vendor/`.
 
 3. **Build**
    ```bash
    npm run build
    ```
+   `prebuild` copies the installed Mermaid IIFE into `src/vendor/` first, so the vendored copy always matches the `mermaid` version in package.json.
+
+4. **Check the published package** (optional, also runs in CI)
+   ```bash
+   npm run check:package
+   ```
+   Packs the CLI, installs the tarball into a temp project and runs its bin.
 
 ## Testing
 
