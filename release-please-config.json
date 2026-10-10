@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "08cd69762d40b012f344d8893d8613788a5e3f80",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "component": "cli",
+      "package-name": "markdown-mermaid-converter-cli",
+      "changelog-path": "CHANGELOG.md",
+      "exclude-paths": ["mermaid-to-pdf-mcp"],
+      "release-as": "2.0.0",
+      "skip-changelog": true
+    },
+    "mermaid-to-pdf-mcp": {
+      "release-type": "node",
+      "component": "mcp",
+      "package-name": "markdown-mermaid-converter-mcp",
+      "release-as": "3.0.0",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "src/index.ts"
+        }
+      ]
+    }
+  }
+}
