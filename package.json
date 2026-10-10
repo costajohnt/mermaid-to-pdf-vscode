@@ -9,7 +9,7 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.12.0"
   },
   "type": "module",
   "main": "./dist/index.js",
@@ -56,13 +56,13 @@
   "dependencies": {
     "glob": "^13.0.6",
     "html-to-docx": "^1.8.0",
-    "katex": "^0.16.33",
+    "katex": "^0.18.11",
     "marked": "^12.0.0",
-    "marked-katex-extension": "^5.1.7",
-    "mermaid": "^11.12.3",
-    "puppeteer": "^23.0.2"
+    "marked-katex-extension": "^5.1.13",
+    "mermaid": "^11.17.2",
+    "puppeteer": "^25.13.0"
   },
   "overrides": {
-    "basic-ftp": ">=5.2.0"
+    "image-size": "^2.0.4"
   }
 }

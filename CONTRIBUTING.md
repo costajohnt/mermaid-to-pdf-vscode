@@ -10,7 +10,7 @@ Thanks for your interest in contributing! This guide covers everything you need 
    cd markdown-mermaid-converter
    ```
 
-2. **Install dependencies** (requires Node.js 18+)
+2. **Install dependencies** (requires Node.js 22.12+)
    ```bash
    npm install
    ```
