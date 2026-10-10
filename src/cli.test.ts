@@ -84,6 +84,20 @@ describe('CLI Tool Tests', () => {
     });
 });
 
+describe('CLI invoked through a symlink (npm bin)', () => {
+    test('--help prints usage when run via a symlinked bin', async () => {
+        const tmpDir = await fs.mkdtemp(join(tmpdir(), 'cli-symlink-test-'));
+        const link = join(tmpDir, 'markdown-mermaid-converter');
+        try {
+            await fs.symlink(join(process.cwd(), 'dist', 'cli.js'), link);
+            const { stdout } = await execFileAsync('node', [link, '--help'], { timeout: 30_000 });
+            assert.match(stdout, /usage/i, 'symlinked bin should print usage');
+        } finally {
+            await fs.rm(tmpDir, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('CLI --json flag', () => {
     const cliPath = join(process.cwd(), 'dist', 'cli.js');
     const fixturePath = join(process.cwd(), 'test-fixtures', 'sample.md');

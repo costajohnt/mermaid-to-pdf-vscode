@@ -2,7 +2,7 @@
 
 import { resolve, join, basename, dirname } from 'path';
 import { promises as fs } from 'fs';
-import { watch as fsWatch } from 'fs';
+import { watch as fsWatch, realpathSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
 import { Converter, closePdfBrowser } from './converter.js';
@@ -693,9 +693,25 @@ function readStdin(timeoutMs: number = 30_000): Promise<string> {
     });
 }
 
+/**
+ * True when `entry` (process.argv[1]) is this file. npm installs the bin as a
+ * symlink (node_modules/.bin/markdown-mermaid-converter), so compare real
+ * paths; comparing the raw argv path made the installed bin exit silently.
+ */
+export function isDirectEntry(entry: string | undefined, modulePath: string): boolean {
+    if (!entry) {
+        return false;
+    }
+    try {
+        return realpathSync(entry) === realpathSync(modulePath);
+    } catch {
+        return false;
+    }
+}
+
 // Only auto-run when this module is the direct entry point
 const currentFilePath = fileURLToPath(import.meta.url);
-if (process.argv[1] === currentFilePath) {
+if (isDirectEntry(process.argv[1], currentFilePath)) {
     main().catch(err => {
         console.error(err);
         process.exit(1);
