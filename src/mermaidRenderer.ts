@@ -140,6 +140,10 @@ export async function createRenderSession(
 
             // Start with user config (if any), then enforce required settings
             const config: Record<string, unknown> = {
+                // Mermaid 12 defaults to ELK layout and the "neo" look; keep the
+                // mermaid 11 output unless the user's config opts in.
+                layout: 'dagre',
+                look: 'classic',
                 ...(userConfig ?? {}),
                 startOnLoad: false,
                 theme: mermaidTheme,
