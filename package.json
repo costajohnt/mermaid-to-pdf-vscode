@@ -26,7 +26,8 @@
     "dist/**/*.d.ts",
     "!dist/**/*.test.js",
     "!dist/**/*.test.d.ts",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",

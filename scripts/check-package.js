@@ -95,6 +95,7 @@ try {
         'package.json',
         'README.md',
         'LICENSE',
+        'THIRD_PARTY_NOTICES.md',
         'dist/cli.js',
         'dist/index.js',
         'dist/index.d.ts',
