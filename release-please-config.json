@@ -8,14 +8,12 @@
       "package-name": "markdown-mermaid-converter-cli",
       "changelog-path": "CHANGELOG.md",
       "exclude-paths": ["mermaid-to-pdf-mcp"],
-      "release-as": "2.0.0",
       "skip-changelog": true
     },
     "mermaid-to-pdf-mcp": {
       "release-type": "node",
       "component": "mcp",
       "package-name": "markdown-mermaid-converter-mcp",
-      "release-as": "3.0.0",
       "extra-files": [
         {
           "type": "generic",
