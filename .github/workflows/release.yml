@@ -3,11 +3,29 @@ name: Release
 # release-please keeps a release PR open on main. Merging it creates the
 # cli-vX.Y.Z / mcp-vX.Y.Z tags and GitHub releases, then the publish job
 # below ships the released packages to npm. No local tag push is needed.
+#
+# Publishing uses npm trusted publishing (OIDC): the job's id-token mints the
+# publish credential, so there is no NPM_TOKEN secret. Each package needs a
+# trusted publisher on npmjs.com for repo costajohnt/mermaid-to-pdf-vscode,
+# workflow release.yml, no environment.
+#
+# Run this workflow manually to republish an existing tag (for example after
+# a failed publish). Versions already on npm are skipped.
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package(s) to publish
+        type: choice
+        options: [both, cli, mcp]
+        default: both
+      tag:
+        description: Existing release tag to check out and publish (e.g. cli-v2.0.0)
+        type: string
+        required: true
 
 permissions:
   contents: write
@@ -33,21 +51,32 @@ jobs:
     name: Publish to npm
     needs: release-please
     if: >-
-      needs.release-please.outputs.cli-released == 'true'
+      github.event_name == 'workflow_dispatch'
+      || needs.release-please.outputs.cli-released == 'true'
       || needs.release-please.outputs.mcp-released == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write   # attach build output to the GitHub release
-      id-token: write   # npm provenance attestation
+      id-token: write   # npm trusted publishing + provenance
+    env:
+      PUBLISH_CLI: ${{ github.event_name == 'workflow_dispatch' && inputs.package != 'mcp' || github.event_name == 'push' && needs.release-please.outputs.cli-released == 'true' }}
+      PUBLISH_MCP: ${{ github.event_name == 'workflow_dispatch' && inputs.package != 'cli' || github.event_name == 'push' && needs.release-please.outputs.mcp-released == 'true' }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        # Manual runs publish an existing tag; refs/tags/ rejects branch names.
+        ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.sha }}
 
     - name: Use Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
-        node-version: '22.x'
+        node-version: 24
         registry-url: 'https://registry.npmjs.org'
+
+    # Trusted publishing needs npm >= 11.5.1.
+    - name: Upgrade npm for trusted publishing
+      run: npm install -g npm@latest && npm --version
 
     - name: Install dependencies
       run: npm ci
@@ -70,34 +99,30 @@ jobs:
     # The two packages have independent versions, so each publish is skipped
     # when that version is already on npm (makes a re-run safe).
     - name: Publish CLI to NPM
-      if: needs.release-please.outputs.cli-released == 'true'
+      if: env.PUBLISH_CLI == 'true'
       run: |
         VERSION=$(node -p "require('./package.json').version")
         if [ -n "$(npm view "markdown-mermaid-converter-cli@$VERSION" version 2>/dev/null)" ]; then
-          echo "markdown-mermaid-converter-cli@$VERSION is already published, skipping"
+          echo "::notice::markdown-mermaid-converter-cli@$VERSION is already on npm, skipping"
         else
           npm publish --provenance --access public
         fi
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
     # Published after the CLI, which it depends on.
     - name: Publish MCP server to NPM
-      if: needs.release-please.outputs.mcp-released == 'true'
+      if: env.PUBLISH_MCP == 'true'
       working-directory: mermaid-to-pdf-mcp
       run: |
         VERSION=$(node -p "require('./package.json').version")
         if [ -n "$(npm view "markdown-mermaid-converter-mcp@$VERSION" version 2>/dev/null)" ]; then
-          echo "markdown-mermaid-converter-mcp@$VERSION is already published, skipping"
+          echo "::notice::markdown-mermaid-converter-mcp@$VERSION is already on npm, skipping"
         else
           npm publish --provenance --access public
         fi
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
     - name: Attach build output to the CLI release
-      if: needs.release-please.outputs.cli-released == 'true'
-      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'push' && needs.release-please.outputs.cli-released == 'true'
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
       with:
         tag_name: ${{ needs.release-please.outputs.cli-tag }}
         files: |
