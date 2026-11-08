@@ -20,6 +20,14 @@ npm install -g markdown-mermaid-converter-mcp
 
 The converter library (`markdown-mermaid-converter-cli`) is installed automatically as a dependency. Nothing needs to be on your PATH. If you also want the command-line tool, install it separately with `npm install -g markdown-mermaid-converter-cli`.
 
+Then install the Chrome build Puppeteer uses. npm 11 and later skip install scripts by default, so Puppeteer's postinstall no longer downloads a browser. On first run without a browser, conversions fail with an error that names the exact command for the Puppeteer version it ships with:
+
+```bash
+npx puppeteer@<version> browsers install chrome
+```
+
+To use a Chrome or Chromium you already have instead, set `PUPPETEER_EXECUTABLE_PATH` to its binary.
+
 ### Option 2: Install from Source
 
 ```bash

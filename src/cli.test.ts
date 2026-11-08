@@ -264,6 +264,28 @@ Some text after the diagram.
     });
 });
 
+describe('CLI missing browser', () => {
+    test('prints install instructions and exits 1 when Chrome is not installed', async () => {
+        const cacheDir = await fs.mkdtemp(join(tmpdir(), 'mmc-no-chrome-'));
+        try {
+            const env = { ...process.env, PUPPETEER_CACHE_DIR: cacheDir };
+            delete env.PUPPETEER_EXECUTABLE_PATH;
+            const cliPath = join(process.cwd(), 'dist', 'cli.js');
+            const input = join(cacheDir, 'doc.md');
+            await fs.writeFile(input, '# Hi\n\n```mermaid\ngraph TD; A-->B\n```\n');
+            const err = await execFileAsync('node', [cliPath, input], { env }).then(
+                () => assert.fail('CLI should exit non-zero without a browser'),
+                (e: { code: number; stderr: string }) => e,
+            );
+            assert.equal(err.code, 1);
+            assert.match(err.stderr, /npx puppeteer@\d+\.\d+\.\d+ browsers install chrome/);
+            assert.match(err.stderr, /PUPPETEER_EXECUTABLE_PATH/);
+        } finally {
+            await fs.rm(cacheDir, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('CLI --watch flag', () => {
     const cliPath = join(process.cwd(), 'dist', 'cli.js');
 
