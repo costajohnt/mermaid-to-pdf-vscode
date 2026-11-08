@@ -74,10 +74,6 @@ jobs:
         node-version: 24
         registry-url: 'https://registry.npmjs.org'
 
-    # Trusted publishing needs npm >= 11.5.1.
-    - name: Upgrade npm for trusted publishing
-      run: npm install -g npm@latest && npm --version
-
     - name: Install dependencies
       run: npm ci
 
@@ -95,6 +91,12 @@ jobs:
 
     - name: Check the packed tarballs (CLI and MCP server) install and run
       run: npm run check:package
+
+    # Trusted publishing needs npm >= 11.5.1. Upgrade only after install and
+    # tests: npm 11 skips dependency install scripts by default, which would
+    # skip Puppeteer's Chrome download and break the render tests.
+    - name: Upgrade npm for trusted publishing
+      run: npm install -g npm@latest && npm --version
 
     # The two packages have independent versions, so each publish is skipped
     # when that version is already on npm (makes a re-run safe).
