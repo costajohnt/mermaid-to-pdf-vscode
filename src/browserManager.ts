@@ -14,8 +14,8 @@ import { getBrowserArgs } from './types.js';
  * can have no browser. Fail with an actionable message instead of Puppeteer's
  * raw "Could not find Chrome" error. Never downloads a browser at runtime.
  */
-export function assertBrowserInstalled(): void {
-    const executable = puppeteer.executablePath();
+export async function assertBrowserInstalled(): Promise<void> {
+    const executable = await puppeteer.executablePath();
     if (existsSync(executable)) { return; }
     // Pin the version: a bare `npx puppeteer` outside this package would fetch
     // the latest Puppeteer and install a Chrome build this one does not expect.
@@ -44,11 +44,10 @@ export async function getBrowser(): Promise<Browser> {
     if (browserLaunchPromise) {
         return browserLaunchPromise;
     }
-    assertBrowserInstalled();
-    browserLaunchPromise = puppeteer.launch({
+    browserLaunchPromise = assertBrowserInstalled().then(() => puppeteer.launch({
         headless: true,
         args: getBrowserArgs(),
-    }).then(browser => {
+    })).then(browser => {
         browserInstance = browser;
         browserLaunchPromise = null;
 

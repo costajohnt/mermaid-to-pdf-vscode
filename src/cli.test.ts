@@ -268,7 +268,7 @@ describe('CLI missing browser', () => {
     test('prints install instructions and exits 1 when Chrome is not installed', async () => {
         const cacheDir = await fs.mkdtemp(join(tmpdir(), 'mmc-no-chrome-'));
         try {
-            const env = { ...process.env, PUPPETEER_CACHE_DIR: cacheDir };
+            const env: NodeJS.ProcessEnv = { ...process.env, PUPPETEER_CACHE_DIR: cacheDir };
             delete env.PUPPETEER_EXECUTABLE_PATH;
             const cliPath = join(process.cwd(), 'dist', 'cli.js');
             const input = join(cacheDir, 'doc.md');
