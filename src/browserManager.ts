@@ -4,8 +4,29 @@
 // PDF generator reuse this single instance so only one Chromium process is
 // launched per CLI invocation.
 
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import puppeteer, { type Browser } from 'puppeteer';
 import { getBrowserArgs } from './types.js';
+
+/**
+ * npm 11+ does not run Puppeteer's postinstall by default, so a fresh install
+ * can have no browser. Fail with an actionable message instead of Puppeteer's
+ * raw "Could not find Chrome" error. Never downloads a browser at runtime.
+ */
+export async function assertBrowserInstalled(): Promise<void> {
+    const executable = await puppeteer.executablePath();
+    if (existsSync(executable)) { return; }
+    // Pin the version: a bare `npx puppeteer` outside this package would fetch
+    // the latest Puppeteer and install a Chrome build this one does not expect.
+    const { version } = createRequire(import.meta.url)('puppeteer/package.json') as { version: string };
+    throw new Error(
+        `No browser found for Puppeteer (expected at ${executable}).\n` +
+        `Install the Chrome build this tool needs with:\n` +
+        `  npx puppeteer@${version} browsers install chrome\n` +
+        `Or point PUPPETEER_EXECUTABLE_PATH at an existing Chrome or Chromium binary.`,
+    );
+}
 
 let browserInstance: Browser | null = null;
 let browserLaunchPromise: Promise<Browser> | null = null;
@@ -23,10 +44,10 @@ export async function getBrowser(): Promise<Browser> {
     if (browserLaunchPromise) {
         return browserLaunchPromise;
     }
-    browserLaunchPromise = puppeteer.launch({
+    browserLaunchPromise = assertBrowserInstalled().then(() => puppeteer.launch({
         headless: true,
         args: getBrowserArgs(),
-    }).then(browser => {
+    })).then(browser => {
         browserInstance = browser;
         browserLaunchPromise = null;
 

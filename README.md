@@ -120,6 +120,16 @@ The AI will automatically:
 npm install -g markdown-mermaid-converter-cli
 ```
 
+Then install the Chrome build Puppeteer uses. npm 11 and later skip install scripts by default, so Puppeteer's postinstall no longer downloads a browser. On first run without a browser, the converter exits with the exact command for the Puppeteer version it ships with:
+
+```bash
+npx puppeteer@<version> browsers install chrome
+```
+
+To use a Chrome or Chromium you already have instead, set `PUPPETEER_EXECUTABLE_PATH` to its binary.
+
+On npm 11+ you can instead let Puppeteer's install script run during the install: `npm install -g markdown-mermaid-converter-cli --allow-scripts=puppeteer`.
+
 ### Basic Usage
 
 ```bash
