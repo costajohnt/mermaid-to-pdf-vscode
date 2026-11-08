@@ -1,7 +1,7 @@
 {
   "name": "markdown-mermaid-converter-cli",
   "description": "CLI tool to convert Markdown files with Mermaid diagrams to PDF",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "costajohnt",
   "repository": {
     "type": "git",

@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.1](https://github.com/costajohnt/mermaid-to-pdf-vscode/compare/mcp-v3.0.0...mcp-v3.0.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* explain how to install a browser when Puppeteer has none ([#91](https://github.com/costajohnt/mermaid-to-pdf-vscode/issues/91)) ([dbeb793](https://github.com/costajohnt/mermaid-to-pdf-vscode/commit/dbeb79308a2327050ba2ddb6ae03f2b69dda49b6))
+
 ## [3.0.0](https://github.com/costajohnt/mermaid-to-pdf-vscode/compare/mcp-v2.0.1...mcp-v3.0.0) (2026-11-08)
 
 
