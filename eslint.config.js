@@ -19,6 +19,9 @@ const sharedRules = {
 };
 
 export default [
+    // Generated mermaid bundle copied in by scripts/vendor-mermaid.js; linting
+    // it runs ESLint out of memory.
+    { ignores: ['src/vendor/**'] },
     {
         files: ['src/**/*.ts'],
         ignores: ['**/*.d.ts', '**/*.test.ts', 'dist/**', 'out/**'],
