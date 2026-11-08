@@ -128,6 +128,8 @@ npx puppeteer@<version> browsers install chrome
 
 To use a Chrome or Chromium you already have instead, set `PUPPETEER_EXECUTABLE_PATH` to its binary.
 
+On npm 11+ you can instead let Puppeteer's install script run during the install: `npm install -g markdown-mermaid-converter-cli --allow-scripts=puppeteer`.
+
 ### Basic Usage
 
 ```bash
