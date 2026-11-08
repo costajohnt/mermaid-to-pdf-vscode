@@ -140,6 +140,10 @@ export async function createRenderSession(
 
             // Start with user config (if any), then enforce required settings
             const config: Record<string, unknown> = {
+                // Mermaid 12 defaults to ELK layout and the "neo" look; keep the
+                // mermaid 11 output unless the user's config opts in.
+                layout: 'dagre',
+                look: 'classic',
                 ...(userConfig ?? {}),
                 startOnLoad: false,
                 theme: mermaidTheme,
@@ -147,15 +151,23 @@ export async function createRenderSession(
                 logLevel: (userConfig?.logLevel as string) ?? 'error',
             };
 
+            // Mermaid 12 per-diagram defaults that change mermaid 11 geometry:
+            // minNodeWidth 120 widens short-label nodes, and the global dagre
+            // default above would pull mindmaps off cose-bilkent. User values win.
+            const legacyDefaults: Record<string, Record<string, unknown>> = {
+                flowchart: { minNodeWidth: 0 },
+                state: { minNodeWidth: 0 },
+                mindmap: userConfig?.layout === undefined ? { layout: 'cose-bilkent' } : {},
+            };
+
             // Enforce useMaxWidth: false on all diagram types, merging with
             // any user-provided diagram-type-specific config
             for (const dt of diagramTypes) {
                 const userDt = userConfig?.[dt];
-                if (userDt && typeof userDt === 'object' && !Array.isArray(userDt)) {
-                    config[dt] = { ...(userDt as Record<string, unknown>), useMaxWidth: false };
-                } else {
-                    config[dt] = { useMaxWidth: false };
-                }
+                const userSection = userDt && typeof userDt === 'object' && !Array.isArray(userDt)
+                    ? userDt as Record<string, unknown>
+                    : {};
+                config[dt] = { ...(legacyDefaults[dt] ?? {}), ...userSection, useMaxWidth: false };
             }
 
             mermaid.initialize(config);
